@@ -8,7 +8,7 @@ from homeassistant.const import CONF_ADDRESS, CONF_NAME, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .bluetooth import FitorbBleClient
+from .bluetooth import FitorbBleClient, FitorbDeviceUnavailable
 from .const import (
     CONF_HEALTH_POLL_INTERVAL,
     DEFAULT_HEALTH_POLL_INTERVAL,
@@ -67,6 +67,10 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
                 base,
                 include_health=include_health,
             )
+        except FitorbDeviceUnavailable as err:
+            previous = self.data or self.base_data
+            _LOGGER.debug("Fitorb ring is not currently connectable: %s", err)
+            return previous.with_values(available=False, last_error=str(err))
         except Exception as err:
             previous = self.data or self.base_data
             self.async_set_updated_data(

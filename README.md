@@ -66,6 +66,10 @@ to another central device. Close the phone app, disconnect the ring from the pho
 Bluetooth settings if needed, wait 30-60 seconds, and reload the integration. If the
 error persists, restart the Home Assistant Bluetooth adapter or the HA VM.
 
+When Home Assistant has no connectable Bluetooth path to the ring during a poll, the
+integration keeps the last known values and marks the connection unavailable until a
+later poll reaches the ring again.
+
 ## Known Limits
 
 - The phone app may need to be disconnected while Home Assistant polls the ring.

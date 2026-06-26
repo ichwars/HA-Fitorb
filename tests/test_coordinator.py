@@ -16,6 +16,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 import custom_components.fitorb as fitorb_init
 from custom_components.fitorb.bluetooth import (
     FitorbBleClient,
+    FitorbDeviceUnavailable,
     FitorbResponseTimeout,
 )
 from custom_components.fitorb.const import (
@@ -114,6 +115,34 @@ async def test_coordinator_marks_entry_unavailable_on_client_timeout(
         coordinator.data.last_error
         == "Timed out waiting for Fitorb battery response"
     )
+
+
+async def test_coordinator_keeps_transient_device_unavailable_quiet(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+) -> None:
+    client = FakeRingClient(
+        err=FitorbDeviceUnavailable("No connectable Bluetooth path to ring")
+    )
+    coordinator = FitorbDataUpdateCoordinator(hass, entry, client)
+    coordinator.async_set_updated_data(
+        FitorbData(
+            address="AA:BB:CC:DD:EE:FF",
+            name="Ring",
+            available=True,
+            heart_rate=89,
+            spo2=97,
+            stress=44,
+        )
+    )
+
+    result = await coordinator._async_update_data()
+
+    assert result.available is False
+    assert result.heart_rate == 89
+    assert result.spo2 == 97
+    assert result.stress == 44
+    assert result.last_error == "No connectable Bluetooth path to ring"
 
 
 async def test_coordinator_requests_health_on_first_successful_update(
