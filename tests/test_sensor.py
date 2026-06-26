@@ -87,7 +87,13 @@ def test_charging_binary_sensor_value(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.parametrize(
-    ("key", "expected_value", "expected_translation_key", "expected_unit", "expected_device_class"),
+    (
+        "key",
+        "expected_value",
+        "expected_translation_key",
+        "expected_unit",
+        "expected_device_class",
+    ),
     [
         ("battery_level", 72, "battery_level", PERCENTAGE, "battery"),
         ("steps", 1234, "steps", None, None),

@@ -7,21 +7,31 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from homeassistant.const import CONF_ADDRESS, CONF_NAME
+from homeassistant.const import CONF_ADDRESS, CONF_NAME, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.fitorb as fitorb_init
-from custom_components.fitorb.bluetooth import FitorbBleClient
-from custom_components.fitorb.const import DOMAIN
+from custom_components.fitorb.bluetooth import (
+    FitorbBleClient,
+    FitorbResponseTimeout,
+)
+from custom_components.fitorb.const import (
+    DEFAULT_SUMMARY_POLL_INTERVAL,
+    DOMAIN,
+)
 from custom_components.fitorb.coordinator import FitorbDataUpdateCoordinator
 from custom_components.fitorb.models import FitorbData, NotificationKind
 
 
 class FakeRingClient:
-    def __init__(self, data: FitorbData | None = None, err: Exception | None = None) -> None:
+    def __init__(
+        self,
+        data: FitorbData | None = None,
+        err: Exception | None = None,
+    ) -> None:
         self.data = data
         self.err = err
         self.calls = 0
@@ -81,6 +91,31 @@ async def test_coordinator_wraps_ble_errors(
         await coordinator._async_update_data()
 
 
+async def test_coordinator_marks_entry_unavailable_on_client_timeout(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+) -> None:
+    client = FakeRingClient(
+        err=FitorbResponseTimeout(
+            "Timed out waiting for Fitorb battery response"
+        )
+    )
+    coordinator = FitorbDataUpdateCoordinator(hass, entry, client)
+
+    with pytest.raises(
+        UpdateFailed,
+        match="Timed out waiting for Fitorb battery response",
+    ):
+        await coordinator._async_update_data()
+
+    assert coordinator.data is not None
+    assert coordinator.data.available is False
+    assert (
+        coordinator.data.last_error
+        == "Timed out waiting for Fitorb battery response"
+    )
+
+
 async def test_coordinator_requests_health_on_first_successful_update(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
@@ -107,6 +142,28 @@ async def test_coordinator_skips_health_when_not_due(
 
     assert second.last_successful_update is not None
     assert client.include_health_calls == [True, False]
+
+
+async def test_coordinator_uses_configured_summary_poll_interval(
+    hass: HomeAssistant,
+) -> None:
+    entry = MockConfigEntry(
+        domain="fitorb",
+        title="Ring",
+        data={CONF_ADDRESS: "AA:BB:CC:DD:EE:FF", CONF_NAME: "Ring"},
+        source="user",
+        entry_id="entry-id",
+        unique_id="AA:BB:CC:DD:EE:FF",
+        options={CONF_SCAN_INTERVAL: 9},
+    )
+    client = FakeRingClient(
+        data=FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+    )
+
+    coordinator = FitorbDataUpdateCoordinator(hass, entry, client)
+
+    assert coordinator.update_interval != DEFAULT_SUMMARY_POLL_INTERVAL
+    assert coordinator.update_interval.total_seconds() == 9 * 60
 
 
 def _battery_notification(level: int = 88, charging: bool = False) -> bytes:
@@ -154,6 +211,10 @@ def _unknown_notification() -> bytes:
     return bytes(payload)
 
 
+def _malformed_notification() -> bytes:
+    return bytes([0x03, 0x01, 0x00])
+
+
 def _test_client() -> FitorbBleClient:
     hass = SimpleNamespace(loop=asyncio.get_running_loop())
     return FitorbBleClient(hass, "AA:BB:CC:DD:EE:FF", response_timeout=0.2)
@@ -172,6 +233,25 @@ async def test_ble_client_counts_unknown_notifications_without_failing() -> None
         expected_kind=NotificationKind.BATTERY,
     )
 
+    assert updated.unknown_notifications == 1
+    assert updated.battery_level == 91
+
+
+async def test_ble_client_counts_malformed_notifications_separately() -> None:
+    client = _test_client()
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    await queue.put(_malformed_notification())
+    await queue.put(_unknown_notification())
+    await queue.put(_battery_notification(level=91))
+    snapshot = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+
+    updated = await client._drain_until_expected(
+        queue,
+        snapshot,
+        expected_kind=NotificationKind.BATTERY,
+    )
+
+    assert updated.malformed_notifications == 1
     assert updated.unknown_notifications == 1
     assert updated.battery_level == 91
 
@@ -226,6 +306,23 @@ async def test_ble_client_health_waits_for_final_result() -> None:
 
     assert updated.heart_rate == 72
     assert queue.qsize() == 1
+
+
+async def test_ble_client_raises_when_expected_response_times_out() -> None:
+    client = _test_client()
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    await queue.put(_unknown_notification())
+    snapshot = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+
+    with pytest.raises(
+        FitorbResponseTimeout,
+        match="Timed out waiting for Fitorb battery response",
+    ):
+        await client._drain_until_expected(
+            queue,
+            snapshot,
+            expected_kind=NotificationKind.BATTERY,
+        )
 
 
 async def test_setup_entry_propagates_first_refresh_failure(

@@ -43,6 +43,10 @@ class FitorbDeviceUnavailable(FitorbBluetoothError):
     """Raised when no connectable BLE device is available."""
 
 
+class FitorbResponseTimeout(FitorbBluetoothError):
+    """Raised when the ring does not send the expected command response."""
+
+
 class FitorbBleClient:
     """Read current data from a Fitorb/Colmi-compatible ring."""
 
@@ -152,6 +156,12 @@ class FitorbBleClient:
                 payload = await asyncio.wait_for(queue.get(), timeout=timeout)
             except TimeoutError:
                 break
+            if len(payload) != 16:
+                _LOGGER.debug("Malformed Fitorb notification: %s", payload.hex())
+                snapshot = snapshot.with_values(
+                    malformed_notifications=snapshot.malformed_notifications + 1
+                )
+                continue
             parsed = parse_notification(payload)
             if parsed is None:
                 _LOGGER.debug("Unknown Fitorb notification: %s", payload.hex())
@@ -163,7 +173,9 @@ class FitorbBleClient:
             if _is_expected_response(parsed.kind, parsed.values, expected):
                 return snapshot
         _LOGGER.debug("No Fitorb %s response before command timeout", expected.value)
-        return snapshot
+        raise FitorbResponseTimeout(
+            f"Timed out waiting for Fitorb {expected.value.replace('_', ' ')} response"
+        )
 
 
 def _apply_notification(

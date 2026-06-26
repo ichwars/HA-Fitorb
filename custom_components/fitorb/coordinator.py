@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_ADDRESS, CONF_NAME
+from homeassistant.const import CONF_ADDRESS, CONF_NAME, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -48,7 +48,14 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=DEFAULT_SUMMARY_POLL_INTERVAL,
+            update_interval=timedelta(
+                minutes=int(
+                    entry.options.get(
+                        CONF_SCAN_INTERVAL,
+                        DEFAULT_SUMMARY_POLL_INTERVAL.total_seconds() / 60,
+                    )
+                )
+            ),
         )
 
     async def _async_update_data(self) -> FitorbData:

@@ -96,7 +96,9 @@ async def async_setup_entry(
 ) -> None:
     """Set up Fitorb sensors."""
     coordinator: FitorbDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(FitorbSensorEntity(coordinator, key) for key in SENSOR_DESCRIPTIONS)
+    async_add_entities(
+        FitorbSensorEntity(coordinator, key) for key in SENSOR_DESCRIPTIONS
+    )
 
 
 class FitorbSensorEntity(CoordinatorEntity[FitorbDataUpdateCoordinator], SensorEntity):

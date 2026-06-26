@@ -22,7 +22,9 @@ def test_build_command_rejects_odd_hex() -> None:
 
 
 def test_parse_direct_battery_response() -> None:
-    parsed = parse_notification(bytes([0x03, 71, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 75]))
+    parsed = parse_notification(
+        bytes([0x03, 71, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 75])
+    )
 
     assert parsed is not None
     assert parsed.kind is NotificationKind.BATTERY
@@ -40,7 +42,9 @@ def test_parse_activity_summary() -> None:
 
 
 def test_parse_heart_rate_result() -> None:
-    parsed = parse_notification(bytes([0x69, 0x01, 0x01, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 207]))
+    parsed = parse_notification(
+        bytes([0x69, 0x01, 0x01, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 207])
+    )
 
     assert parsed is not None
     assert parsed.kind is NotificationKind.HEART_RATE
@@ -48,7 +52,9 @@ def test_parse_heart_rate_result() -> None:
 
 
 def test_parse_spo2_result() -> None:
-    parsed = parse_notification(bytes([0x69, 0x03, 0x01, 98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5]))
+    parsed = parse_notification(
+        bytes([0x69, 0x03, 0x01, 98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5])
+    )
 
     assert parsed is not None
     assert parsed.kind is NotificationKind.SPO2
@@ -56,7 +62,9 @@ def test_parse_spo2_result() -> None:
 
 
 def test_parse_stress_result() -> None:
-    parsed = parse_notification(bytes([0x69, 0x08, 0x01, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 164]))
+    parsed = parse_notification(
+        bytes([0x69, 0x08, 0x01, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 164])
+    )
 
     assert parsed is not None
     assert parsed.kind is NotificationKind.STRESS
@@ -64,4 +72,9 @@ def test_parse_stress_result() -> None:
 
 
 def test_parse_unknown_notification_returns_none() -> None:
-    assert parse_notification(bytes([0x99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])) is None
+    assert (
+        parse_notification(
+            bytes([0x99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+        )
+        is None
+    )

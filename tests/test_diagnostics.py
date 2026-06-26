@@ -14,6 +14,7 @@ class FakeCoordinator:
         address="AA:BB:CC:DD:EE:FF",
         name="Ring",
         available=True,
+        last_error="Failed to connect to AA:BB:CC:DD:EE:FF via 11:22:33:44:55:66",
         unknown_notifications=2,
         malformed_notifications=1,
     )
@@ -35,5 +36,9 @@ async def test_diagnostics_redacts_address(hass: HomeAssistant) -> None:
 
     assert diagnostics["address"] == "AA:BB:CC:***"
     assert diagnostics["available"] is True
+    assert (
+        diagnostics["last_error"]
+        == "Failed to connect to AA:BB:CC:*** via 11:22:33:***"
+    )
     assert diagnostics["unknown_notifications"] == 2
     assert diagnostics["malformed_notifications"] == 1
