@@ -131,7 +131,12 @@ async def test_coordinator_requests_health_on_first_successful_update(
 async def test_coordinator_skips_health_when_not_due(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    data = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring", steps=123)
+    data = FitorbData(
+        address="AA:BB:CC:DD:EE:FF",
+        name="Ring",
+        steps=123,
+        heart_rate=72,
+    )
     client = FakeRingClient(data=data)
     coordinator = FitorbDataUpdateCoordinator(hass, entry, client)
 
@@ -142,6 +147,22 @@ async def test_coordinator_skips_health_when_not_due(
 
     assert second.last_successful_update is not None
     assert client.include_health_calls == [True, False]
+
+
+async def test_coordinator_retries_health_until_a_value_is_observed(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    data = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring", steps=123)
+    client = FakeRingClient(data=data)
+    coordinator = FitorbDataUpdateCoordinator(hass, entry, client)
+
+    first = await coordinator._async_update_data()
+    coordinator.async_set_updated_data(first)
+
+    await coordinator._async_update_data()
+
+    assert coordinator.last_successful_health_poll is None
+    assert client.include_health_calls == [True, True]
 
 
 async def test_coordinator_uses_configured_summary_poll_interval(
@@ -556,6 +577,28 @@ async def test_ble_client_health_running_state_extends_timeout() -> None:
     await task
 
     assert updated.heart_rate == 72
+
+
+async def test_ble_client_health_no_value_response_logs_raw_payload(caplog) -> None:
+    client = _test_client()
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    await queue.put(
+        bytes([0x69, 0x01, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x6A])
+    )
+    snapshot = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+    caplog.set_level("DEBUG", logger="custom_components.fitorb.bluetooth")
+
+    updated = await client._drain_optional_response(
+        queue,
+        snapshot,
+        expected_kind=NotificationKind.HEART_RATE,
+    )
+
+    assert updated is snapshot
+    assert caplog.records[-1].message == (
+        "Fitorb heart_rate response did not include a value: "
+        "6901000000000000000000000000006a"
+    )
 
 
 async def test_ble_client_health_waits_for_final_result() -> None:

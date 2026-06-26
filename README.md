@@ -52,7 +52,9 @@ Debug logs may include raw BLE notification payloads in hexadecimal form.
 Heart rate, SpO2, and stress reads are best-effort. Some Fitorb/Colmi-compatible
 firmware versions do not answer the known live health commands, so the integration
 uses a short optional timeout until a measurement starts, then waits longer for
-the final value while keeping battery/activity values.
+the final value while keeping battery/activity values. Until the first live health
+value is observed, Home Assistant retries health reads on every summary poll.
+Debug logging shows raw health packets when the ring answers without a value.
 
 ## Troubleshooting
 

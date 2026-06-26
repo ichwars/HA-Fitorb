@@ -74,8 +74,13 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
             )
             raise UpdateFailed(str(err)) from err
         updated_at = datetime.now(UTC)
-        if include_health:
+        if include_health and _has_health_value(data):
             self.last_successful_health_poll = updated_at
+        elif include_health:
+            _LOGGER.debug(
+                "Fitorb health poll did not return health values; "
+                "will retry on next summary poll"
+            )
         return data.with_values(
             available=True,
             last_error=None,
@@ -89,3 +94,12 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
         return datetime.now(UTC) - self.last_successful_health_poll >= (
             self.health_poll_interval
         )
+
+
+def _has_health_value(data: FitorbData) -> bool:
+    """Return whether a snapshot contains at least one live health value."""
+    return (
+        data.heart_rate is not None
+        or data.spo2 is not None
+        or data.stress is not None
+    )

@@ -36,6 +36,11 @@ _HEALTH_NOTIFICATION_KINDS = {
     NotificationKind.SPO2,
     NotificationKind.STRESS,
 }
+_HEALTH_VALUE_KEYS = {
+    NotificationKind.HEART_RATE: "heart_rate",
+    NotificationKind.SPO2: "spo2",
+    NotificationKind.STRESS: "stress",
+}
 
 
 class FitorbBluetoothError(Exception):
@@ -168,7 +173,13 @@ class FitorbBleClient:
     ) -> FitorbData:
         """Write and drain an optional command without losing current values."""
         try:
-            await client.write_gatt_char(CMD_WRITE_CHAR_UUID, build_command(command))
+            payload = build_command(command)
+            _LOGGER.debug(
+                "Requesting optional Fitorb %s data with command %s",
+                expected_kind.value,
+                payload.hex(),
+            )
+            await client.write_gatt_char(CMD_WRITE_CHAR_UUID, payload)
         except Exception as err:
             _LOGGER.debug(
                 "Unable to request optional Fitorb %s data; keeping current values: %s",
@@ -283,6 +294,15 @@ class FitorbBleClient:
                 continue
             snapshot = _apply_notification(snapshot, parsed.kind, parsed.values)
             if _is_expected_response(parsed.kind, parsed.values, expected):
+                if _is_health_response_without_value(
+                    parsed.kind,
+                    parsed.values,
+                ):
+                    _LOGGER.debug(
+                        "Fitorb %s response did not include a value: %s",
+                        parsed.kind.value,
+                        parsed.raw_hex,
+                    )
                 return snapshot
             if (
                 parsed.kind is expected
@@ -341,3 +361,12 @@ def _is_expected_response(
     if expected_kind in _HEALTH_NOTIFICATION_KINDS:
         return values.get("running") is False
     return True
+
+
+def _is_health_response_without_value(
+    kind: NotificationKind,
+    values: dict[str, object],
+) -> bool:
+    """Return whether a health command completed without a measured value."""
+    value_key = _HEALTH_VALUE_KEYS.get(kind)
+    return value_key is not None and values.get(value_key) is None
