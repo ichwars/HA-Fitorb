@@ -559,6 +559,45 @@ async def test_ble_client_treats_out_of_connection_slots_as_unavailable() -> Non
             )
 
 
+async def test_ble_client_treats_missing_command_notify_as_unavailable() -> None:
+    class FakeBleakClient:
+        async def start_notify(self, _uuid, _handler) -> None:
+            raise Exception(
+                "Characteristic 6e400003-b5a3-f393-e0a9-e50e24dcca9e "
+                "was not found!"
+            )
+
+        async def stop_notify(self, _uuid) -> None:
+            raise AssertionError("stop_notify should not run before start_notify")
+
+        async def disconnect(self) -> None:
+            return None
+
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(hass, "AA:BB:CC:DD:EE:FF", response_timeout=0.05)
+
+    with (
+        patch(
+            (
+                "custom_components.fitorb.bluetooth.bluetooth"
+                ".async_ble_device_from_address"
+            ),
+            return_value=object(),
+        ),
+        patch(
+            "custom_components.fitorb.bluetooth.establish_connection",
+            AsyncMock(return_value=FakeBleakClient()),
+        ),
+    ):
+        with pytest.raises(
+            FitorbDeviceUnavailable,
+            match="6e400003-b5a3-f393-e0a9-e50e24dcca9e",
+        ):
+            await client.async_read_current_data(
+                FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+            )
+
+
 async def test_ble_client_battery_returns_after_expected_response() -> None:
     client = _test_client()
     queue: asyncio.Queue[bytes] = asyncio.Queue()

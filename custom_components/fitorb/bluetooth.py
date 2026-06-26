@@ -145,13 +145,25 @@ class FitorbBleClient:
             if _is_ble_connection_unavailable_error(err):
                 raise FitorbDeviceUnavailable(str(err)) from err
             raise
+        notifications_started = False
         try:
-            await client.start_notify(CMD_NOTIFY_CHAR_UUID, _notification_handler)
+            try:
+                await client.start_notify(CMD_NOTIFY_CHAR_UUID, _notification_handler)
+                notifications_started = True
+            except Exception as err:
+                if _is_ble_connection_unavailable_error(err):
+                    raise FitorbDeviceUnavailable(str(err)) from err
+                raise
             snapshot = base.with_values(available=True, last_error=None)
-            await client.write_gatt_char(
-                CMD_WRITE_CHAR_UUID,
-                build_command(COMMAND_BATTERY),
-            )
+            try:
+                await client.write_gatt_char(
+                    CMD_WRITE_CHAR_UUID,
+                    build_command(COMMAND_BATTERY),
+                )
+            except Exception as err:
+                if _is_ble_connection_unavailable_error(err):
+                    raise FitorbDeviceUnavailable(str(err)) from err
+                raise
             snapshot = await self._drain_until_expected(
                 queue,
                 snapshot,
@@ -202,10 +214,11 @@ class FitorbBleClient:
                 )
             return FitorbReadResult(data=snapshot, history=history_result)
         finally:
-            try:
-                await client.stop_notify(CMD_NOTIFY_CHAR_UUID)
-            except Exception as err:
-                _LOGGER.debug("Unable to stop Fitorb notifications: %s", err)
+            if notifications_started:
+                try:
+                    await client.stop_notify(CMD_NOTIFY_CHAR_UUID)
+                except Exception as err:
+                    _LOGGER.debug("Unable to stop Fitorb notifications: %s", err)
             try:
                 await client.disconnect()
             except Exception as err:
@@ -676,6 +689,8 @@ def _is_ble_session_unavailable_error(err: Exception) -> bool:
 def _is_ble_connection_unavailable_error(err: Exception) -> bool:
     """Return whether an exception means no connectable BLE path is available."""
     message = str(err).lower()
+    if "characteristic" in message and "was not found" in message:
+        return True
     return any(
         marker in message
         for marker in (
