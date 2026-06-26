@@ -20,8 +20,12 @@ from custom_components.fitorb.bluetooth import (
     FitorbResponseTimeout,
 )
 from custom_components.fitorb.const import (
+    CMD_NOTIFY_CHAR_UUID,
+    CMD_WRITE_CHAR_UUID,
     DEFAULT_SUMMARY_POLL_INTERVAL,
     DOMAIN,
+    RAW_NOTIFY_CHAR_UUID,
+    RAW_WRITE_CHAR_UUID,
 )
 from custom_components.fitorb.coordinator import FitorbDataUpdateCoordinator
 from custom_components.fitorb.models import (
@@ -30,6 +34,7 @@ from custom_components.fitorb.models import (
     FitorbHistoryResult,
     FitorbHistorySample,
     FitorbReadResult,
+    FitorbSleepSummary,
     HistoryMetric,
     NotificationKind,
 )
@@ -87,6 +92,7 @@ class FakeHistoryStore:
         self.last_status = None
         self.unknown_packets = 0
         self.malformed_packets = 0
+        self.sleep_summary = None
         self.recorded_results: list[FitorbHistoryResult] = []
 
     async def async_load(self) -> None:
@@ -104,6 +110,7 @@ class FakeHistoryStore:
         self.last_status = result.status
         self.unknown_packets = result.unknown_packets
         self.malformed_packets = result.malformed_packets
+        self.sleep_summary = result.sleep_summary
         self.recorded_results.append(result)
         return result.samples
 
@@ -347,6 +354,17 @@ async def test_coordinator_rehydrates_persisted_history_when_not_due(
     store.last_status = "success"
     store.unknown_packets = 2
     store.malformed_packets = 1
+    store.sleep_summary = FitorbSleepSummary(
+        source_day=date(2026, 6, 26),
+        start=datetime(2026, 6, 26, 23, 0, tzinfo=UTC),
+        end=datetime(2026, 6, 27, 5, 8, tzinfo=UTC),
+        duration_minutes=368,
+        asleep_minutes=363,
+        awake_minutes=5,
+        light_minutes=180,
+        deep_minutes=135,
+        rem_minutes=48,
+    )
     coordinator = FitorbDataUpdateCoordinator(hass, entry, client, history_store=store)
 
     result = await coordinator._async_update_data()
@@ -360,6 +378,12 @@ async def test_coordinator_rehydrates_persisted_history_when_not_due(
     assert result.last_history_last_sample == last_sample
     assert result.history_unknown_packets == 2
     assert result.history_malformed_packets == 1
+    assert result.sleep_duration_minutes == 368
+    assert result.sleep_asleep_minutes == 363
+    assert result.sleep_light_minutes == 180
+    assert result.sleep_deep_minutes == 135
+    assert result.sleep_rem_minutes == 48
+    assert result.sleep_awake_minutes == 5
 
 
 async def test_coordinator_rehydrates_persisted_history_when_unavailable(
@@ -920,6 +944,146 @@ async def test_ble_client_reads_heart_rate_history_after_live_values() -> None:
     assert result.history.unknown_packets == 0
     assert result.history.malformed_packets == 0
     assert any(command[0] == 0x15 for command in fake_client.commands)
+
+
+async def test_ble_client_reads_sleep_history_from_big_data() -> None:
+    sleep_payload = bytes(
+        [
+            1,
+            0,
+            16,
+            0x64,
+            0x05,
+            0x34,
+            0x01,
+            2,
+            60,
+            3,
+            45,
+            4,
+            48,
+            2,
+            120,
+            5,
+            5,
+            3,
+            90,
+        ]
+    )
+    sleep_frame = (
+        bytes([0xBC, 0x27, len(sleep_payload), 0, 0x79, 0xED]) + sleep_payload
+    )
+
+    class FakeBleakClient:
+        def __init__(self) -> None:
+            self.handlers = {}
+            self.commands: list[tuple[str, bytes]] = []
+
+        async def start_notify(self, uuid, handler) -> None:
+            self.handlers[uuid] = handler
+
+        async def write_gatt_char(self, uuid, payload: bytes) -> None:
+            self.commands.append((uuid, payload))
+            if uuid == CMD_WRITE_CHAR_UUID and payload[0] == 0x03:
+                self.handlers[CMD_NOTIFY_CHAR_UUID](
+                    1, bytearray(_battery_notification(level=82))
+                )
+            elif uuid == CMD_WRITE_CHAR_UUID and payload[0] == 0x15:
+                self.handlers[CMD_NOTIFY_CHAR_UUID](
+                    1,
+                    bytearray(
+                        bytes([21, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28])
+                    ),
+                )
+                self.handlers[CMD_NOTIFY_CHAR_UUID](
+                    1,
+                    bytearray(
+                        bytes(
+                            [
+                                21,
+                                1,
+                                0,
+                                193,
+                                61,
+                                106,
+                                72,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                75,
+                                0,
+                                0,
+                                211,
+                            ]
+                        )
+                    ),
+                )
+            elif uuid == RAW_WRITE_CHAR_UUID and payload[:2] == bytes([0xBC, 0x27]):
+                self.handlers[RAW_NOTIFY_CHAR_UUID](1, bytearray(sleep_frame))
+
+        async def stop_notify(self, _uuid) -> None:
+            return None
+
+        async def disconnect(self) -> None:
+            return None
+
+    fake_client = FakeBleakClient()
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(hass, "AA:BB:CC:DD:EE:FF", response_timeout=0.05)
+
+    with (
+        patch(
+            "custom_components.fitorb.bluetooth.bluetooth.async_ble_device_from_address",
+            return_value=object(),
+        ),
+        patch(
+            "custom_components.fitorb.bluetooth.establish_connection",
+            AsyncMock(return_value=fake_client),
+        ),
+        patch(
+            "custom_components.fitorb.bluetooth.date",
+            Mock(today=Mock(return_value=date(2026, 6, 26))),
+        ),
+    ):
+        result = await client.async_read_current_data_with_history(
+            FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring"),
+            include_health=False,
+            history_request=FitorbHistoryRequest(
+                days=(date(2026, 6, 26),),
+                day_offsets=(0,),
+            ),
+        )
+
+    assert result.data.battery_level == 82
+    assert result.history is not None
+    assert result.history.status == "success"
+    assert result.history.sleep_summary == FitorbSleepSummary(
+        source_day=date(2026, 6, 26),
+        start=datetime(2026, 6, 26, 23, 0, tzinfo=UTC),
+        end=datetime(2026, 6, 27, 5, 8, tzinfo=UTC),
+        duration_minutes=368,
+        asleep_minutes=363,
+        awake_minutes=5,
+        light_minutes=180,
+        deep_minutes=135,
+        rem_minutes=48,
+    )
+    sleep_stages = [
+        sample.value
+        for sample in result.history.samples
+        if sample.metric is HistoryMetric.SLEEP_STAGE
+    ]
+    assert sleep_stages == [
+        "light",
+        "deep",
+        "rem",
+        "light",
+        "awake",
+        "deep",
+    ]
+    assert any(command[0] == RAW_WRITE_CHAR_UUID for command in fake_client.commands)
 
 
 async def test_ble_client_history_timeout_keeps_live_result() -> None:

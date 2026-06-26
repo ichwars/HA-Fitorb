@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 
-from .models import FitorbHistorySample, HistoryMetric
+from .models import FitorbHistorySample, FitorbSleepSummary, HistoryMetric
 from .protocol import build_command
 
 BIG_DATA_MAGIC = 0xBC
@@ -24,6 +24,22 @@ class BigDataFrame:
     crc16: int
     payload: bytes
     raw_hex: str
+
+
+@dataclass(frozen=True, slots=True)
+class SleepHistoryParseResult:
+    """Parsed sleep history samples and latest summary."""
+
+    samples: tuple[FitorbHistorySample, ...]
+    summary: FitorbSleepSummary | None
+
+
+_SLEEP_STAGE_LABELS = {
+    2: "light",
+    3: "deep",
+    4: "rem",
+    5: "awake",
+}
 
 
 def _checksum_packet(payload: bytes) -> bytes:
@@ -63,6 +79,97 @@ def build_big_data_request(data_id: int) -> bytes:
     if not 0 <= data_id <= 0xFF:
         raise ValueError("data_id must fit in one byte")
     return bytes([BIG_DATA_MAGIC, data_id, 0, 0, 0xFF, 0xFF])
+
+
+def parse_sleep_history_payload(
+    payload: bytes,
+    *,
+    today: date | None = None,
+    tz: tzinfo = UTC,
+) -> SleepHistoryParseResult:
+    """Parse Colmi Big Data sleep payload 0x27 into stage samples and summary."""
+    if not payload:
+        return SleepHistoryParseResult(samples=(), summary=None)
+
+    today = today or datetime.now(tz).date()
+    sleep_days = payload[0]
+    offset = 1
+    samples: list[FitorbHistorySample] = []
+    summaries: list[tuple[int, FitorbSleepSummary]] = []
+
+    for _ in range(sleep_days):
+        if offset + 2 > len(payload):
+            break
+
+        days_ago = payload[offset]
+        day_payload_len = payload[offset + 1]
+        day_payload_start = offset + 2
+        day_payload_end = day_payload_start + day_payload_len
+        if day_payload_len < 4 or day_payload_end > len(payload):
+            break
+
+        source_day = today - timedelta(days=days_ago)
+        sleep_start = int.from_bytes(
+            payload[offset + 2 : offset + 4],
+            "little",
+            signed=True,
+        )
+        sleep_end = int.from_bytes(
+            payload[offset + 4 : offset + 6],
+            "little",
+            signed=True,
+        )
+        duration_minutes = _sleep_duration_minutes(sleep_start, sleep_end)
+        start = datetime.combine(source_day, time.min, tzinfo=tz) + _minutes(
+            sleep_start
+        )
+        end = start + _minutes(duration_minutes)
+
+        stage_minutes = {"awake": 0, "light": 0, "deep": 0, "rem": 0}
+        cursor = 0
+        period_offset = day_payload_start + 4
+        while period_offset + 2 <= day_payload_end:
+            stage_raw = payload[period_offset]
+            minutes = payload[period_offset + 1]
+            period_offset += 2
+            stage = _SLEEP_STAGE_LABELS.get(stage_raw)
+            if stage is None:
+                cursor += minutes
+                continue
+
+            stage_minutes[stage] += minutes
+            samples.append(
+                FitorbHistorySample(
+                    metric=HistoryMetric.SLEEP_STAGE,
+                    timestamp=start + _minutes(cursor),
+                    value=stage,
+                    source_day=source_day,
+                    raw_hex=bytes([stage_raw, minutes]).hex(),
+                )
+            )
+            cursor += minutes
+
+        awake_minutes = stage_minutes["awake"]
+        summaries.append(
+            (
+                days_ago,
+                FitorbSleepSummary(
+                    source_day=source_day,
+                    start=start,
+                    end=end,
+                    duration_minutes=duration_minutes,
+                    asleep_minutes=max(0, duration_minutes - awake_minutes),
+                    awake_minutes=awake_minutes,
+                    light_minutes=stage_minutes["light"],
+                    deep_minutes=stage_minutes["deep"],
+                    rem_minutes=stage_minutes["rem"],
+                ),
+            )
+        )
+        offset = day_payload_end
+
+    summary = min(summaries, key=lambda item: item[0])[1] if summaries else None
+    return SleepHistoryParseResult(samples=tuple(samples), summary=summary)
 
 
 def parse_heart_rate_history_packets(
@@ -147,6 +254,12 @@ class HeartRateHistoryParser:
 
 def _minutes(value: int) -> timedelta:
     return timedelta(minutes=value)
+
+
+def _sleep_duration_minutes(start: int, end: int) -> int:
+    if end <= start:
+        return (24 * 60 - start) + end
+    return end - start
 
 
 class SplitSeriesHistoryParser:

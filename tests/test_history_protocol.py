@@ -10,6 +10,7 @@ from custom_components.fitorb.history_protocol import (
     build_heart_rate_history_command,
     build_split_series_history_command,
     parse_heart_rate_history_packets,
+    parse_sleep_history_payload,
 )
 from custom_components.fitorb.models import HistoryMetric
 
@@ -121,3 +122,53 @@ def test_big_data_frame_parser_reassembles_chunked_sleep_response() -> None:
     assert len(frames) == 1
     assert frames[0].data_id == 0x27
     assert frames[0].payload == payload
+
+
+def test_parse_sleep_history_payload_decodes_stage_summary() -> None:
+    payload = bytes(
+        [
+            1,
+            0,
+            16,
+            0x64,
+            0x05,
+            0x34,
+            0x01,
+            2,
+            60,
+            3,
+            45,
+            4,
+            48,
+            2,
+            120,
+            5,
+            5,
+            3,
+            90,
+        ]
+    )
+
+    result = parse_sleep_history_payload(payload, today=date(2026, 6, 26))
+
+    assert result.summary is not None
+    assert result.summary.start == datetime(2026, 6, 26, 23, 0, tzinfo=UTC)
+    assert result.summary.end == datetime(2026, 6, 27, 5, 8, tzinfo=UTC)
+    assert result.summary.duration_minutes == 368
+    assert result.summary.asleep_minutes == 363
+    assert result.summary.light_minutes == 180
+    assert result.summary.deep_minutes == 135
+    assert result.summary.rem_minutes == 48
+    assert result.summary.awake_minutes == 5
+    assert [sample.value for sample in result.samples] == [
+        "light",
+        "deep",
+        "rem",
+        "light",
+        "awake",
+        "deep",
+    ]
+    assert result.samples[0].metric is HistoryMetric.SLEEP_STAGE
+    assert result.samples[0].timestamp == datetime(2026, 6, 26, 23, 0, tzinfo=UTC)
+    assert result.samples[1].timestamp == datetime(2026, 6, 27, 0, 0, tzinfo=UTC)
+    assert result.samples[-1].timestamp == datetime(2026, 6, 27, 3, 38, tzinfo=UTC)

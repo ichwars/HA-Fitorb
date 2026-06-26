@@ -9,6 +9,7 @@ from unittest.mock import patch
 from custom_components.fitorb.models import (
     FitorbHistoryResult,
     FitorbHistorySample,
+    FitorbSleepSummary,
     HistoryMetric,
 )
 
@@ -139,6 +140,32 @@ class TestFitorbHistoryStore(IsolatedAsyncioTestCase):
         assert reloaded_store.last_status == "partial"
         assert reloaded_store.unknown_packets == 2
         assert reloaded_store.malformed_packets == 1
+
+    async def test_history_store_reloads_sleep_summary(self) -> None:
+        from custom_components.fitorb.history_store import FitorbHistoryStore
+
+        summary = FitorbSleepSummary(
+            source_day=date(2026, 6, 26),
+            start=datetime(2026, 6, 26, 23, 0, tzinfo=UTC),
+            end=datetime(2026, 6, 27, 5, 8, tzinfo=UTC),
+            duration_minutes=368,
+            asleep_minutes=363,
+            awake_minutes=5,
+            light_minutes=180,
+            deep_minutes=135,
+            rem_minutes=48,
+        )
+        store = FitorbHistoryStore(object(), "entry-id")
+        await store.async_load()
+        await store.async_record_result(
+            FitorbHistoryResult(status="success", sleep_summary=summary),
+            datetime(2026, 6, 26, 13, 0, tzinfo=UTC),
+        )
+
+        reloaded_store = FitorbHistoryStore(object(), "entry-id")
+        await reloaded_store.async_load()
+
+        assert reloaded_store.sleep_summary == summary
 
     async def test_history_store_tracks_first_and_last_sample(self) -> None:
         from custom_components.fitorb.history_store import FitorbHistoryStore

@@ -53,6 +53,21 @@ class FitorbHistorySample:
 
 
 @dataclass(frozen=True, slots=True)
+class FitorbSleepSummary:
+    """Summary for the most recent parsed sleep period."""
+
+    source_day: date
+    start: datetime
+    end: datetime
+    duration_minutes: int
+    asleep_minutes: int
+    awake_minutes: int
+    light_minutes: int
+    deep_minutes: int
+    rem_minutes: int
+
+
+@dataclass(frozen=True, slots=True)
 class FitorbHistoryResult:
     """Result of one historical sync attempt."""
 
@@ -61,6 +76,7 @@ class FitorbHistoryResult:
     requested_days: int = 0
     first_sample: datetime | None = None
     last_sample: datetime | None = None
+    sleep_summary: FitorbSleepSummary | None = None
     unknown_packets: int = 0
     malformed_packets: int = 0
 
@@ -88,6 +104,14 @@ class FitorbData:
     heart_rate: int | None = None
     spo2: int | None = None
     stress: int | None = None
+    sleep_start: datetime | None = None
+    sleep_end: datetime | None = None
+    sleep_duration_minutes: int | None = None
+    sleep_asleep_minutes: int | None = None
+    sleep_awake_minutes: int | None = None
+    sleep_light_minutes: int | None = None
+    sleep_deep_minutes: int | None = None
+    sleep_rem_minutes: int | None = None
     last_successful_update: datetime | None = None
     last_error: str | None = None
     last_history_sync: datetime | None = None

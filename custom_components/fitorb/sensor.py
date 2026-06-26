@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, PERCENTAGE, UnitOfLength
+from homeassistant.const import EntityCategory, PERCENTAGE, UnitOfLength, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
@@ -78,6 +78,66 @@ SENSOR_DESCRIPTIONS: dict[str, FitorbSensorDescription] = {
         translation_key="stress",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.stress,
+    ),
+    "sleep_start": FitorbSensorDescription(
+        key="sleep_start",
+        translation_key="sleep_start",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda data: data.sleep_start,
+    ),
+    "sleep_end": FitorbSensorDescription(
+        key="sleep_end",
+        translation_key="sleep_end",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda data: data.sleep_end,
+    ),
+    "sleep_duration": FitorbSensorDescription(
+        key="sleep_duration",
+        translation_key="sleep_duration",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.sleep_duration_minutes,
+    ),
+    "sleep_asleep": FitorbSensorDescription(
+        key="sleep_asleep",
+        translation_key="sleep_asleep",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.sleep_asleep_minutes,
+    ),
+    "sleep_awake": FitorbSensorDescription(
+        key="sleep_awake",
+        translation_key="sleep_awake",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.sleep_awake_minutes,
+    ),
+    "sleep_light": FitorbSensorDescription(
+        key="sleep_light",
+        translation_key="sleep_light",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.sleep_light_minutes,
+    ),
+    "sleep_deep": FitorbSensorDescription(
+        key="sleep_deep",
+        translation_key="sleep_deep",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.sleep_deep_minutes,
+    ),
+    "sleep_rem": FitorbSensorDescription(
+        key="sleep_rem",
+        translation_key="sleep_rem",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.sleep_rem_minutes,
     ),
     "last_successful_update": FitorbSensorDescription(
         key="last_successful_update",

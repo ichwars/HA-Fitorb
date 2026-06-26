@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
-from .models import FitorbHistoryResult, FitorbHistorySample
+from .models import FitorbHistoryResult, FitorbHistorySample, FitorbSleepSummary
 
 _STORE_VERSION = 1
 
@@ -29,6 +29,7 @@ class FitorbHistoryStore:
             "last_status": None,
             "unknown_packets": 0,
             "malformed_packets": 0,
+            "sleep_summary": None,
             "samples": {},
         }
 
@@ -68,6 +69,11 @@ class FitorbHistoryStore:
         """Return malformed packet count from the last history sync."""
         return _parse_int(self._data.get("malformed_packets"))
 
+    @property
+    def sleep_summary(self) -> FitorbSleepSummary | None:
+        """Return the latest persisted sleep summary."""
+        return _sleep_summary_from_json(self._data.get("sleep_summary"))
+
     async def async_load(self) -> None:
         """Load store data from disk."""
         loaded = await self._store.async_load()
@@ -97,6 +103,10 @@ class FitorbHistoryStore:
         self._data["last_status"] = result.status
         self._data["unknown_packets"] = result.unknown_packets
         self._data["malformed_packets"] = result.malformed_packets
+        if result.sleep_summary is not None:
+            self._data["sleep_summary"] = _sleep_summary_to_json(
+                result.sleep_summary
+            )
 
         timestamps = [
             _parse_datetime(item.get("timestamp"))
@@ -133,6 +143,45 @@ def _sample_to_json(sample: FitorbHistorySample) -> dict[str, Any]:
         "source_day": sample.source_day.isoformat(),
         "raw_hex": sample.raw_hex,
     }
+
+
+def _sleep_summary_to_json(summary: FitorbSleepSummary) -> dict[str, Any]:
+    return {
+        "source_day": summary.source_day.isoformat(),
+        "start": summary.start.astimezone(UTC).isoformat(),
+        "end": summary.end.astimezone(UTC).isoformat(),
+        "duration_minutes": summary.duration_minutes,
+        "asleep_minutes": summary.asleep_minutes,
+        "awake_minutes": summary.awake_minutes,
+        "light_minutes": summary.light_minutes,
+        "deep_minutes": summary.deep_minutes,
+        "rem_minutes": summary.rem_minutes,
+    }
+
+
+def _sleep_summary_from_json(value: object) -> FitorbSleepSummary | None:
+    if not isinstance(value, dict):
+        return None
+    start = _parse_datetime(value.get("start"))
+    end = _parse_datetime(value.get("end"))
+    source_day_value = value.get("source_day")
+    if start is None or end is None or not isinstance(source_day_value, str):
+        return None
+    try:
+        source_day = datetime.fromisoformat(source_day_value).date()
+    except ValueError:
+        return None
+    return FitorbSleepSummary(
+        source_day=source_day,
+        start=start,
+        end=end,
+        duration_minutes=_parse_int(value.get("duration_minutes")),
+        asleep_minutes=_parse_int(value.get("asleep_minutes")),
+        awake_minutes=_parse_int(value.get("awake_minutes")),
+        light_minutes=_parse_int(value.get("light_minutes")),
+        deep_minutes=_parse_int(value.get("deep_minutes")),
+        rem_minutes=_parse_int(value.get("rem_minutes")),
+    )
 
 
 def _parse_datetime(value: object) -> datetime | None:

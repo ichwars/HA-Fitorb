@@ -73,4 +73,14 @@ async def async_get_config_entry_diagnostics(
             "unknown_packets": data.history_unknown_packets if data else 0,
             "malformed_packets": data.history_malformed_packets if data else 0,
         },
+        "sleep": {
+            "start": _iso_or_none(data.sleep_start) if data else None,
+            "end": _iso_or_none(data.sleep_end) if data else None,
+            "duration_minutes": data.sleep_duration_minutes if data else None,
+            "asleep_minutes": data.sleep_asleep_minutes if data else None,
+            "awake_minutes": data.sleep_awake_minutes if data else None,
+            "light_minutes": data.sleep_light_minutes if data else None,
+            "deep_minutes": data.sleep_deep_minutes if data else None,
+            "rem_minutes": data.sleep_rem_minutes if data else None,
+        },
     }

@@ -44,6 +44,14 @@ def _sample_data() -> FitorbData:
         last_history_status="success",
         last_history_first_sample=datetime(2026, 6, 25, 0, 0, tzinfo=UTC),
         last_history_last_sample=datetime(2026, 6, 26, 0, 0, tzinfo=UTC),
+        sleep_start=datetime(2026, 6, 26, 23, 0, tzinfo=UTC),
+        sleep_end=datetime(2026, 6, 27, 5, 8, tzinfo=UTC),
+        sleep_duration_minutes=368,
+        sleep_asleep_minutes=363,
+        sleep_awake_minutes=5,
+        sleep_light_minutes=180,
+        sleep_deep_minutes=135,
+        sleep_rem_minutes=48,
     )
 
 
@@ -137,6 +145,26 @@ def test_charging_binary_sensor_value(hass: HomeAssistant) -> None:
             None,
             "timestamp",
         ),
+        (
+            "sleep_start",
+            datetime(2026, 6, 26, 23, 0, tzinfo=UTC),
+            "sleep_start",
+            None,
+            "timestamp",
+        ),
+        (
+            "sleep_end",
+            datetime(2026, 6, 27, 5, 8, tzinfo=UTC),
+            "sleep_end",
+            None,
+            "timestamp",
+        ),
+        ("sleep_duration", 368, "sleep_duration", "min", "duration"),
+        ("sleep_asleep", 363, "sleep_asleep", "min", "duration"),
+        ("sleep_awake", 5, "sleep_awake", "min", "duration"),
+        ("sleep_light", 180, "sleep_light", "min", "duration"),
+        ("sleep_deep", 135, "sleep_deep", "min", "duration"),
+        ("sleep_rem", 48, "sleep_rem", "min", "duration"),
     ],
 )
 def test_all_sensor_descriptors_map_values_and_metadata(

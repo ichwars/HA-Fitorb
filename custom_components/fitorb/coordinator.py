@@ -152,6 +152,7 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
         sample_count = self.history_store.last_sample_count
         unknown_packets = self.history_store.unknown_packets
         malformed_packets = self.history_store.malformed_packets
+        sleep_summary = self.history_store.sleep_summary
         if (
             last_sync is None
             and last_status is None
@@ -160,17 +161,32 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
             and sample_count == 0
             and unknown_packets == 0
             and malformed_packets == 0
+            and sleep_summary is None
         ):
             return data
-        return data.with_values(
-            last_history_sync=last_sync,
-            last_history_sample_count=sample_count,
-            last_history_status=last_status,
-            last_history_first_sample=first_sample,
-            last_history_last_sample=last_sample,
-            history_unknown_packets=unknown_packets,
-            history_malformed_packets=malformed_packets,
-        )
+        values = {
+            "last_history_sync": last_sync,
+            "last_history_sample_count": sample_count,
+            "last_history_status": last_status,
+            "last_history_first_sample": first_sample,
+            "last_history_last_sample": last_sample,
+            "history_unknown_packets": unknown_packets,
+            "history_malformed_packets": malformed_packets,
+        }
+        if sleep_summary is not None:
+            values.update(
+                {
+                    "sleep_start": sleep_summary.start,
+                    "sleep_end": sleep_summary.end,
+                    "sleep_duration_minutes": sleep_summary.duration_minutes,
+                    "sleep_asleep_minutes": sleep_summary.asleep_minutes,
+                    "sleep_awake_minutes": sleep_summary.awake_minutes,
+                    "sleep_light_minutes": sleep_summary.light_minutes,
+                    "sleep_deep_minutes": sleep_summary.deep_minutes,
+                    "sleep_rem_minutes": sleep_summary.rem_minutes,
+                }
+            )
+        return data.with_values(**values)
 
     def _history_sync_is_due(self, now: datetime) -> bool:
         """Return whether history sync should run on this update."""
