@@ -26,6 +26,9 @@ class FitorbHistoryStore:
             "last_sample_count": 0,
             "first_sample": None,
             "last_sample": None,
+            "last_status": None,
+            "unknown_packets": 0,
+            "malformed_packets": 0,
             "samples": {},
         }
 
@@ -48,6 +51,22 @@ class FitorbHistoryStore:
     def last_sample(self) -> datetime | None:
         """Return the latest unique historical sample timestamp."""
         return _parse_datetime(self._data.get("last_sample"))
+
+    @property
+    def last_status(self) -> str | None:
+        """Return the last history sync status."""
+        value = self._data.get("last_status")
+        return value if isinstance(value, str) else None
+
+    @property
+    def unknown_packets(self) -> int:
+        """Return unknown packet count from the last history sync."""
+        return _parse_int(self._data.get("unknown_packets"))
+
+    @property
+    def malformed_packets(self) -> int:
+        """Return malformed packet count from the last history sync."""
+        return _parse_int(self._data.get("malformed_packets"))
 
     async def async_load(self) -> None:
         """Load store data from disk."""
@@ -75,6 +94,9 @@ class FitorbHistoryStore:
 
         self._data["last_sync"] = synced_at.astimezone(UTC).isoformat()
         self._data["last_sample_count"] = len(samples)
+        self._data["last_status"] = result.status
+        self._data["unknown_packets"] = result.unknown_packets
+        self._data["malformed_packets"] = result.malformed_packets
 
         timestamps = [
             _parse_datetime(item.get("timestamp"))
@@ -123,3 +145,10 @@ def _parse_datetime(value: object) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def _parse_int(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0

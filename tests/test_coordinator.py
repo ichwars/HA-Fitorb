@@ -84,6 +84,9 @@ class FakeHistoryStore:
         self.last_sample_count = 0
         self.first_sample = None
         self.last_sample = None
+        self.last_status = None
+        self.unknown_packets = 0
+        self.malformed_packets = 0
         self.recorded_results: list[FitorbHistoryResult] = []
 
     async def async_load(self) -> None:
@@ -98,6 +101,9 @@ class FakeHistoryStore:
         self.last_sample_count += len(result.samples)
         self.first_sample = result.first_sample
         self.last_sample = result.last_sample
+        self.last_status = result.status
+        self.unknown_packets = result.unknown_packets
+        self.malformed_packets = result.malformed_packets
         self.recorded_results.append(result)
         return result.samples
 
@@ -317,6 +323,70 @@ async def test_coordinator_skips_history_when_not_due(
     await coordinator._async_update_data()
 
     assert client.history_requests == [None]
+
+
+async def test_coordinator_rehydrates_persisted_history_when_not_due(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+) -> None:
+    first_sample = datetime(2026, 6, 25, 6, 0, tzinfo=UTC)
+    last_sample = datetime(2026, 6, 26, 6, 0, tzinfo=UTC)
+    client = FakeRingClient(
+        data=FitorbData(
+            address="AA:BB:CC:DD:EE:FF",
+            name="Ring",
+            available=True,
+            steps=123,
+        )
+    )
+    store = FakeHistoryStore()
+    store.last_sync = datetime.now(UTC)
+    store.last_sample_count = 42
+    store.first_sample = first_sample
+    store.last_sample = last_sample
+    store.last_status = "success"
+    store.unknown_packets = 2
+    store.malformed_packets = 1
+    coordinator = FitorbDataUpdateCoordinator(hass, entry, client, history_store=store)
+
+    result = await coordinator._async_update_data()
+
+    assert client.history_requests == [None]
+    assert result.steps == 123
+    assert result.last_history_sync == store.last_sync
+    assert result.last_history_sample_count == 42
+    assert result.last_history_status == "success"
+    assert result.last_history_first_sample == first_sample
+    assert result.last_history_last_sample == last_sample
+    assert result.history_unknown_packets == 2
+    assert result.history_malformed_packets == 1
+
+
+async def test_coordinator_rehydrates_persisted_history_when_unavailable(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+) -> None:
+    first_sample = datetime(2026, 6, 25, 6, 0, tzinfo=UTC)
+    last_sample = datetime(2026, 6, 26, 6, 0, tzinfo=UTC)
+    client = FakeRingClient(
+        err=FitorbDeviceUnavailable("No connectable Bluetooth path to ring")
+    )
+    store = FakeHistoryStore()
+    store.last_sync = datetime.now(UTC)
+    store.last_sample_count = 42
+    store.first_sample = first_sample
+    store.last_sample = last_sample
+    store.last_status = "success"
+    coordinator = FitorbDataUpdateCoordinator(hass, entry, client, history_store=store)
+
+    result = await coordinator._async_update_data()
+
+    assert result.available is False
+    assert result.last_history_sync == store.last_sync
+    assert result.last_history_sample_count == 42
+    assert result.last_history_status == "success"
+    assert result.last_history_first_sample == first_sample
+    assert result.last_history_last_sample == last_sample
 
 
 def _battery_notification(level: int = 88, charging: bool = False) -> bytes:
@@ -1089,3 +1159,53 @@ async def test_setup_entry_keeps_entry_loaded_on_first_refresh_failure(
     assert fallback.available is False
     assert fallback.last_error == "ring offline"
     forward_setups.assert_awaited_once_with(entry, fitorb_init.PLATFORMS)
+
+
+async def test_setup_entry_reloads_on_options_update(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    entry.add_to_hass(hass)
+    base_data = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+    fake_coordinator = SimpleNamespace(
+        base_data=base_data,
+        history_store=SimpleNamespace(async_load=AsyncMock()),
+        async_set_updated_data=AsyncMock(),
+        async_config_entry_first_refresh=AsyncMock(),
+    )
+    listeners = []
+    unload_callbacks = []
+
+    def _add_update_listener(listener):
+        listeners.append(listener)
+        return lambda: None
+
+    def _async_on_unload(callback):
+        unload_callbacks.append(callback)
+
+    with (
+        patch.object(entry, "add_update_listener", _add_update_listener),
+        patch.object(entry, "async_on_unload", _async_on_unload),
+        patch.object(fitorb_init, "FitorbBleClient", return_value=object()),
+        patch.object(
+            fitorb_init,
+            "FitorbDataUpdateCoordinator",
+            return_value=fake_coordinator,
+        ),
+        patch.object(
+            hass.config_entries,
+            "async_forward_entry_setups",
+            AsyncMock(return_value=True),
+        ),
+        patch.object(
+            hass.config_entries,
+            "async_reload",
+            AsyncMock(return_value=True),
+        ) as async_reload,
+    ):
+        result = await fitorb_init.async_setup_entry(hass, entry)
+        await listeners[0](hass, entry)
+
+    assert result is True
+    assert len(listeners) == 1
+    assert len(unload_callbacks) == 1
+    async_reload.assert_awaited_once_with(entry.entry_id)

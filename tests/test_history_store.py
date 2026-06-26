@@ -116,6 +116,30 @@ class TestFitorbHistoryStore(IsolatedAsyncioTestCase):
         assert reloaded_store.last_sync == datetime(2026, 6, 26, 13, 1, tzinfo=UTC)
         assert reloaded_store.last_sample_count == 2
 
+    async def test_history_store_reloads_status_and_packet_counters(self) -> None:
+        from custom_components.fitorb.history_store import FitorbHistoryStore
+
+        store = FitorbHistoryStore(object(), "entry-id")
+        await store.async_load()
+
+        await store.async_record_result(
+            FitorbHistoryResult(
+                samples=(_sample(),),
+                status="partial",
+                requested_days=7,
+                unknown_packets=2,
+                malformed_packets=1,
+            ),
+            datetime(2026, 6, 26, 13, 1, tzinfo=UTC),
+        )
+
+        reloaded_store = FitorbHistoryStore(object(), "entry-id")
+        await reloaded_store.async_load()
+
+        assert reloaded_store.last_status == "partial"
+        assert reloaded_store.unknown_packets == 2
+        assert reloaded_store.malformed_packets == 1
+
     async def test_history_store_tracks_first_and_last_sample(self) -> None:
         from custom_components.fitorb.history_store import FitorbHistoryStore
 

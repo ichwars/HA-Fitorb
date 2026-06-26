@@ -105,32 +105,26 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
             if history is not None:
                 try:
                     await self.history_store.async_record_result(history, now)
-                    data = data.with_values(
-                        last_history_sync=now,
-                        last_history_sample_count=self.history_store.last_sample_count,
-                        last_history_status=history.status,
-                        last_history_first_sample=self.history_store.first_sample,
-                        last_history_last_sample=self.history_store.last_sample,
-                        history_unknown_packets=history.unknown_packets,
-                        history_malformed_packets=history.malformed_packets,
-                    )
+                    data = self._apply_history_store_summary(data)
                 except Exception as err:
                     _LOGGER.debug(
                         "Unable to persist Fitorb history sync result: %s",
                         err,
                     )
-                    data = data.with_values(
+                    data = self._apply_history_store_summary(data).with_values(
                         last_history_sync=now,
                         last_history_status="error",
                         history_unknown_packets=history.unknown_packets,
                         history_malformed_packets=history.malformed_packets,
                     )
+            else:
+                data = self._apply_history_store_summary(data)
         except FitorbDeviceUnavailable as err:
-            previous = self.data or self.base_data
+            previous = self._apply_history_store_summary(self.data or self.base_data)
             _LOGGER.debug("Fitorb ring is not currently connectable: %s", err)
             return previous.with_values(available=False, last_error=str(err))
         except Exception as err:
-            previous = self.data or self.base_data
+            previous = self._apply_history_store_summary(self.data or self.base_data)
             self.async_set_updated_data(
                 previous.with_values(available=False, last_error=str(err))
             )
@@ -147,6 +141,35 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
             available=True,
             last_error=None,
             last_successful_update=updated_at,
+        )
+
+    def _apply_history_store_summary(self, data: FitorbData) -> FitorbData:
+        """Return data with persisted history summary metadata applied."""
+        last_sync = self.history_store.last_sync
+        last_status = self.history_store.last_status
+        first_sample = self.history_store.first_sample
+        last_sample = self.history_store.last_sample
+        sample_count = self.history_store.last_sample_count
+        unknown_packets = self.history_store.unknown_packets
+        malformed_packets = self.history_store.malformed_packets
+        if (
+            last_sync is None
+            and last_status is None
+            and first_sample is None
+            and last_sample is None
+            and sample_count == 0
+            and unknown_packets == 0
+            and malformed_packets == 0
+        ):
+            return data
+        return data.with_values(
+            last_history_sync=last_sync,
+            last_history_sample_count=sample_count,
+            last_history_status=last_status,
+            last_history_first_sample=first_sample,
+            last_history_last_sample=last_sample,
+            history_unknown_packets=unknown_packets,
+            history_malformed_packets=malformed_packets,
         )
 
     def _history_sync_is_due(self, now: datetime) -> bool:

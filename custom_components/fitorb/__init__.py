@@ -17,6 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Fitorb from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     client = FitorbBleClient(hass, entry.data[CONF_ADDRESS])
     coordinator = FitorbDataUpdateCoordinator(hass, entry, client)
     await coordinator.history_store.async_load()
@@ -41,3 +42,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
+
+
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload Fitorb when config entry options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
