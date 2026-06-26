@@ -66,6 +66,14 @@ class FitorbHistoryResult:
 
 
 @dataclass(frozen=True, slots=True)
+class FitorbHistoryRequest:
+    """History ranges requested during one BLE session."""
+
+    days: tuple[date, ...]
+    day_offsets: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class FitorbData:
     """Latest known ring data snapshot."""
 

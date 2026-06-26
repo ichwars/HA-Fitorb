@@ -17,7 +17,17 @@ from .const import (
     DEFAULT_HEALTH_RESPONSE_TIMEOUT,
     DEFAULT_RESPONSE_TIMEOUT,
 )
-from .models import FitorbData, NotificationKind
+from .history_protocol import (
+    build_heart_rate_history_command,
+    parse_heart_rate_history_packets,
+)
+from .models import (
+    FitorbData,
+    FitorbHistoryRequest,
+    FitorbHistoryResult,
+    FitorbReadResult,
+    NotificationKind,
+)
 from .protocol import (
     ActivityLogParser,
     COMMAND_ACTIVITY,
@@ -82,6 +92,21 @@ class FitorbBleClient:
         include_health: bool = True,
     ) -> FitorbData:
         """Connect to the ring and read the Version 1 current values."""
+        result = await self.async_read_current_data_with_history(
+            base,
+            include_health=include_health,
+            history_request=None,
+        )
+        return result.data
+
+    async def async_read_current_data_with_history(
+        self,
+        base: FitorbData,
+        *,
+        include_health: bool = True,
+        history_request: FitorbHistoryRequest | None = None,
+    ) -> FitorbReadResult:
+        """Connect to the ring and read current values plus optional history."""
         ble_device = bluetooth.async_ble_device_from_address(
             self.hass,
             self.address,
@@ -138,7 +163,14 @@ class FitorbBleClient:
                         command=command,
                         expected_kind=expected_kind,
                     )
-            return snapshot
+            history_result = None
+            if history_request is not None:
+                history_result = await self._read_history(
+                    queue,
+                    client,
+                    history_request,
+                )
+            return FitorbReadResult(data=snapshot, history=history_result)
         finally:
             try:
                 await client.stop_notify(CMD_NOTIFY_CHAR_UUID)
@@ -239,6 +271,48 @@ class FitorbBleClient:
             )
             return snapshot
 
+    async def _read_history(
+        self,
+        queue: asyncio.Queue[bytes],
+        client: BleakClient,
+        request: FitorbHistoryRequest,
+    ) -> FitorbHistoryResult:
+        """Read supported history packet families without failing live values."""
+        samples = []
+        unknown_packets = 0
+        malformed_packets = 0
+        status = "success"
+        for target_day in request.days:
+            packets: list[bytes] = []
+            try:
+                await client.write_gatt_char(
+                    CMD_WRITE_CHAR_UUID,
+                    build_heart_rate_history_command(target_day),
+                )
+                packets = await self._drain_history_packets(
+                    queue,
+                    expected_command=0x15,
+                )
+            except Exception as err:
+                _LOGGER.debug(
+                    "Unable to read Fitorb heart_rate history for %s: %s",
+                    target_day.isoformat(),
+                    err,
+                )
+                status = "partial"
+                continue
+            samples.extend(parse_heart_rate_history_packets(packets))
+        ordered = tuple(sorted(samples, key=lambda sample: sample.timestamp))
+        return FitorbHistoryResult(
+            samples=ordered,
+            status=status,
+            requested_days=len(request.days),
+            first_sample=ordered[0].timestamp if ordered else None,
+            last_sample=ordered[-1].timestamp if ordered else None,
+            unknown_packets=unknown_packets,
+            malformed_packets=malformed_packets,
+        )
+
     async def _drain_until_expected(
         self,
         queue: asyncio.Queue[bytes],
@@ -330,6 +404,38 @@ class FitorbBleClient:
         raise FitorbResponseTimeout(
             f"Timed out waiting for Fitorb {expected.value.replace('_', ' ')} response"
         )
+
+    async def _drain_history_packets(
+        self,
+        queue: asyncio.Queue[bytes],
+        *,
+        expected_command: int,
+    ) -> list[bytes]:
+        """Drain history packets until a parser-visible end or timeout."""
+        packets: list[bytes] = []
+        end_time = self.hass.loop.time() + self.response_timeout
+        while self.hass.loop.time() < end_time:
+            timeout = max(0.1, end_time - self.hass.loop.time())
+            try:
+                payload = await asyncio.wait_for(queue.get(), timeout=timeout)
+            except TimeoutError:
+                break
+            if len(payload) != 16:
+                _LOGGER.debug("Malformed Fitorb history notification: %s", payload.hex())
+                continue
+            if payload[0] != expected_command:
+                _LOGGER.debug("Unknown Fitorb history notification: %s", payload.hex())
+                continue
+            packets.append(payload)
+            if payload[1] == 0xFF:
+                break
+            if payload[1] > 0 and packets and packets[0][1] == 0:
+                expected_packets = packets[0][2]
+                if expected_packets and payload[1] >= expected_packets - 1:
+                    break
+        if not packets:
+            raise FitorbResponseTimeout("Timed out waiting for Fitorb history response")
+        return packets
 
 
 def _apply_notification(

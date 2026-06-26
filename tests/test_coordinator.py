@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC
+from datetime import UTC, date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -24,7 +24,12 @@ from custom_components.fitorb.const import (
     DOMAIN,
 )
 from custom_components.fitorb.coordinator import FitorbDataUpdateCoordinator
-from custom_components.fitorb.models import FitorbData, NotificationKind
+from custom_components.fitorb.models import (
+    FitorbData,
+    FitorbHistoryRequest,
+    FitorbReadResult,
+    NotificationKind,
+)
 
 
 class FakeRingClient:
@@ -680,6 +685,118 @@ async def test_ble_client_raises_when_expected_response_times_out() -> None:
             snapshot,
             expected_kind=NotificationKind.BATTERY,
         )
+
+
+async def test_ble_client_reads_heart_rate_history_after_live_values() -> None:
+    class FakeBleakClient:
+        def __init__(self) -> None:
+            self.handler = None
+            self.commands: list[bytes] = []
+
+        async def start_notify(self, _uuid, handler) -> None:
+            self.handler = handler
+
+        async def write_gatt_char(self, _uuid, payload: bytes) -> None:
+            self.commands.append(payload)
+            assert self.handler is not None
+            if payload[0] == 0x03:
+                self.handler(1, bytearray(_battery_notification(level=82)))
+            elif payload[0] == 0x15:
+                self.handler(
+                    1,
+                    bytearray(
+                        bytes([21, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28])
+                    ),
+                )
+                self.handler(
+                    1,
+                    bytearray(
+                        bytes([21, 1, 0, 193, 61, 106, 72, 0, 0, 0, 0, 0, 75, 0, 0, 211])
+                    ),
+                )
+
+        async def stop_notify(self, _uuid) -> None:
+            return None
+
+        async def disconnect(self) -> None:
+            return None
+
+    fake_client = FakeBleakClient()
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(hass, "AA:BB:CC:DD:EE:FF", response_timeout=0.05)
+
+    with (
+        patch(
+            "custom_components.fitorb.bluetooth.bluetooth.async_ble_device_from_address",
+            return_value=object(),
+        ),
+        patch(
+            "custom_components.fitorb.bluetooth.establish_connection",
+            AsyncMock(return_value=fake_client),
+        ),
+    ):
+        result = await client.async_read_current_data_with_history(
+            FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring"),
+            include_health=False,
+            history_request=FitorbHistoryRequest(
+                days=(date(2026, 6, 26),),
+                day_offsets=(0,),
+            ),
+        )
+
+    assert isinstance(result, FitorbReadResult)
+    assert result.data.battery_level == 82
+    assert result.history is not None
+    assert result.history.status == "success"
+    assert [sample.value for sample in result.history.samples] == [72, 75]
+    assert any(command[0] == 0x15 for command in fake_client.commands)
+
+
+async def test_ble_client_history_timeout_keeps_live_result() -> None:
+    class FakeBleakClient:
+        def __init__(self) -> None:
+            self.handler = None
+
+        async def start_notify(self, _uuid, handler) -> None:
+            self.handler = handler
+
+        async def write_gatt_char(self, _uuid, payload: bytes) -> None:
+            assert self.handler is not None
+            if payload[0] == 0x03:
+                self.handler(1, bytearray(_battery_notification(level=82)))
+
+        async def stop_notify(self, _uuid) -> None:
+            return None
+
+        async def disconnect(self) -> None:
+            return None
+
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(hass, "AA:BB:CC:DD:EE:FF", response_timeout=0.05)
+
+    with (
+        patch(
+            "custom_components.fitorb.bluetooth.bluetooth.async_ble_device_from_address",
+            return_value=object(),
+        ),
+        patch(
+            "custom_components.fitorb.bluetooth.establish_connection",
+            AsyncMock(return_value=FakeBleakClient()),
+        ),
+    ):
+        result = await client.async_read_current_data_with_history(
+            FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring"),
+            include_health=False,
+            history_request=FitorbHistoryRequest(
+                days=(date(2026, 6, 26),),
+                day_offsets=(0,),
+            ),
+        )
+
+    assert result.data.battery_level == 82
+    assert result.history is not None
+    assert result.history.status == "partial"
+    assert result.history.samples == ()
 
 
 async def test_setup_entry_keeps_entry_loaded_on_first_refresh_failure(
