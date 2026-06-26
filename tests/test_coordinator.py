@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -1127,9 +1127,17 @@ async def test_setup_entry_keeps_entry_loaded_on_first_refresh_failure(
 ) -> None:
     entry.add_to_hass(hass)
     base_data = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+    apply_history_summary = Mock(
+        side_effect=lambda data: data.with_values(
+            last_history_sample_count=42,
+            last_history_status="success",
+        )
+    )
     fake_coordinator = SimpleNamespace(
         base_data=base_data,
+        data=None,
         history_store=SimpleNamespace(async_load=AsyncMock()),
+        _apply_history_store_summary=apply_history_summary,
         async_set_updated_data=AsyncMock(),
         async_config_entry_first_refresh=AsyncMock(
             side_effect=ConfigEntryNotReady("ring offline")
@@ -1158,6 +1166,9 @@ async def test_setup_entry_keeps_entry_loaded_on_first_refresh_failure(
     fallback = fake_coordinator.async_set_updated_data.call_args.args[0]
     assert fallback.available is False
     assert fallback.last_error == "ring offline"
+    assert fallback.last_history_sample_count == 42
+    assert fallback.last_history_status == "success"
+    apply_history_summary.assert_called_once_with(base_data)
     forward_setups.assert_awaited_once_with(entry, fitorb_init.PLATFORMS)
 
 

@@ -28,8 +28,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "Fitorb ring is unavailable during setup and will be polled again: %s",
             err,
         )
+        fallback = coordinator._apply_history_store_summary(
+            coordinator.data or coordinator.base_data
+        )
         coordinator.async_set_updated_data(
-            coordinator.base_data.with_values(available=False, last_error=str(err))
+            fallback.with_values(available=False, last_error=str(err))
         )
     hass.data[DOMAIN][entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
