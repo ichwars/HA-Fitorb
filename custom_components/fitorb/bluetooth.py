@@ -28,6 +28,11 @@ from .protocol import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+_HEALTH_NOTIFICATION_KINDS = {
+    NotificationKind.HEART_RATE,
+    NotificationKind.SPO2,
+    NotificationKind.STRESS,
+}
 
 
 class FitorbBluetoothError(Exception):
@@ -54,7 +59,12 @@ class FitorbBleClient:
         self.connect_timeout = connect_timeout
         self.response_timeout = response_timeout
 
-    async def async_read_current_data(self, base: FitorbData) -> FitorbData:
+    async def async_read_current_data(
+        self,
+        base: FitorbData,
+        *,
+        include_health: bool = True,
+    ) -> FitorbData:
         """Connect to the ring and read the Version 1 current values."""
         ble_device = bluetooth.async_ble_device_from_address(
             self.hass,
@@ -78,19 +88,43 @@ class FitorbBleClient:
         try:
             await client.start_notify(CMD_NOTIFY_CHAR_UUID, _notification_handler)
             snapshot = base.with_values(available=True, last_error=None)
-            for command in (
-                COMMAND_BATTERY,
-                COMMAND_SET_METRIC_UNITS,
-                COMMAND_ACTIVITY,
-                COMMAND_HEART_RATE,
-                COMMAND_SPO2,
-                COMMAND_STRESS,
-            ):
-                await client.write_gatt_char(
-                    CMD_WRITE_CHAR_UUID,
-                    build_command(command),
-                )
-                snapshot = await self._drain_notifications(queue, snapshot)
+            await client.write_gatt_char(
+                CMD_WRITE_CHAR_UUID,
+                build_command(COMMAND_BATTERY),
+            )
+            snapshot = await self._drain_until_expected(
+                queue,
+                snapshot,
+                expected_kind=NotificationKind.BATTERY,
+            )
+            await client.write_gatt_char(
+                CMD_WRITE_CHAR_UUID,
+                build_command(COMMAND_SET_METRIC_UNITS),
+            )
+            await client.write_gatt_char(
+                CMD_WRITE_CHAR_UUID,
+                build_command(COMMAND_ACTIVITY),
+            )
+            snapshot = await self._drain_until_expected(
+                queue,
+                snapshot,
+                expected_kind=NotificationKind.ACTIVITY,
+            )
+            if include_health:
+                for command, expected_kind in (
+                    (COMMAND_HEART_RATE, NotificationKind.HEART_RATE),
+                    (COMMAND_SPO2, NotificationKind.SPO2),
+                    (COMMAND_STRESS, NotificationKind.STRESS),
+                ):
+                    await client.write_gatt_char(
+                        CMD_WRITE_CHAR_UUID,
+                        build_command(command),
+                    )
+                    snapshot = await self._drain_until_expected(
+                        queue,
+                        snapshot,
+                        expected_kind=expected_kind,
+                    )
             return snapshot
         finally:
             try:
@@ -102,13 +136,15 @@ class FitorbBleClient:
             except Exception:
                 _LOGGER.debug("Unable to disconnect Fitorb client", exc_info=True)
 
-    async def _drain_notifications(
+    async def _drain_until_expected(
         self,
         queue: asyncio.Queue[bytes],
         snapshot: FitorbData,
+        *,
+        expected_kind: NotificationKind | str,
     ) -> FitorbData:
-        """Drain currently available notifications after a command."""
-        saw_response = False
+        """Drain notifications until the expected response is received."""
+        expected = NotificationKind(expected_kind)
         end_time = self.hass.loop.time() + self.response_timeout
         while self.hass.loop.time() < end_time:
             timeout = max(0.1, end_time - self.hass.loop.time())
@@ -123,12 +159,10 @@ class FitorbBleClient:
                     unknown_notifications=snapshot.unknown_notifications + 1
                 )
                 continue
-            saw_response = True
             snapshot = _apply_notification(snapshot, parsed.kind, parsed.values)
-            if parsed.values.get("running") is False:
-                break
-        if not saw_response:
-            _LOGGER.debug("No Fitorb response before command timeout")
+            if _is_expected_response(parsed.kind, parsed.values, expected):
+                return snapshot
+        _LOGGER.debug("No Fitorb %s response before command timeout", expected.value)
         return snapshot
 
 
@@ -156,3 +190,16 @@ def _apply_notification(
     if kind is NotificationKind.STRESS and values.get("stress") is not None:
         return snapshot.with_values(stress=values["stress"])
     return snapshot
+
+
+def _is_expected_response(
+    kind: NotificationKind,
+    values: dict[str, object],
+    expected_kind: NotificationKind,
+) -> bool:
+    """Return whether a parsed notification completes the expected command."""
+    if kind is not expected_kind:
+        return False
+    if expected_kind in _HEALTH_NOTIFICATION_KINDS:
+        return values.get("running") is False
+    return True
