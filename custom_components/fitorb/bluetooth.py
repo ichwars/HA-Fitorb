@@ -453,8 +453,6 @@ class FitorbBleClient:
                 if expected_packets and payload[1] >= expected_packets - 1:
                     completed = True
                     break
-        if not packets:
-            raise FitorbResponseTimeout("Timed out waiting for Fitorb history response")
         return packets, completed, unknown_packets, malformed_packets
 
 

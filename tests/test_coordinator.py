@@ -835,6 +835,61 @@ async def test_ble_client_history_counts_unknown_and_malformed_packets() -> None
     assert len(packets) == 2
 
 
+async def test_ble_client_history_timeout_reports_packet_counters() -> None:
+    class FakeBleakClient:
+        def __init__(self) -> None:
+            self.handler = None
+
+        async def start_notify(self, _uuid, handler) -> None:
+            self.handler = handler
+
+        async def write_gatt_char(self, _uuid, payload: bytes) -> None:
+            assert self.handler is not None
+            if payload[0] == 0x03:
+                self.handler(1, bytearray(_battery_notification(level=82)))
+            elif payload[0] == 0x15:
+                self.handler(1, bytearray(_unknown_notification()))
+                self.handler(1, bytearray(_malformed_notification()))
+
+        async def stop_notify(self, _uuid) -> None:
+            return None
+
+        async def disconnect(self) -> None:
+            return None
+
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(hass, "AA:BB:CC:DD:EE:FF", response_timeout=0.05)
+
+    with (
+        patch(
+            (
+                "custom_components.fitorb.bluetooth.bluetooth"
+                ".async_ble_device_from_address"
+            ),
+            return_value=object(),
+        ),
+        patch(
+            "custom_components.fitorb.bluetooth.establish_connection",
+            AsyncMock(return_value=FakeBleakClient()),
+        ),
+    ):
+        result = await client.async_read_current_data_with_history(
+            FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring"),
+            include_health=False,
+            history_request=FitorbHistoryRequest(
+                days=(date(2026, 6, 26),),
+                day_offsets=(0,),
+            ),
+        )
+
+    assert result.data.battery_level == 82
+    assert result.history is not None
+    assert result.history.status == "partial"
+    assert result.history.samples == ()
+    assert result.history.unknown_packets == 1
+    assert result.history.malformed_packets == 1
+
+
 async def test_ble_client_history_parse_failure_keeps_live_result() -> None:
     class FakeBleakClient:
         def __init__(self) -> None:

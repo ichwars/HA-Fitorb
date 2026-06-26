@@ -75,7 +75,7 @@ def parse_heart_rate_history_packets(
         parsed = parser.consume(packet)
         if parsed is not None:
             samples = parsed
-    return samples
+    return samples or parser.finish_partial()
 
 
 class HeartRateHistoryParser:
@@ -110,6 +110,10 @@ class HeartRateHistoryParser:
         if self._expected_packets and subtype >= self._expected_packets - 1:
             return self._samples()
         return None
+
+    def finish_partial(self) -> tuple[FitorbHistorySample, ...]:
+        """Return samples from packets received before a transfer completed."""
+        return self._samples()
 
     def _append_values(self, values: bytes) -> None:
         self._raw.extend(int(value) for value in values)
