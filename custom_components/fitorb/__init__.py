@@ -19,6 +19,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     client = FitorbBleClient(hass, entry.data[CONF_ADDRESS])
     coordinator = FitorbDataUpdateCoordinator(hass, entry, client)
+    await coordinator.history_store.async_load()
     try:
         await coordinator.async_config_entry_first_refresh()
     except ConfigEntryNotReady as err:

@@ -11,11 +11,17 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .bluetooth import FitorbBleClient, FitorbDeviceUnavailable
 from .const import (
     CONF_HEALTH_POLL_INTERVAL,
+    CONF_HISTORY_LOOKBACK_DAYS,
+    CONF_HISTORY_SYNC_INTERVAL,
     DEFAULT_HEALTH_POLL_INTERVAL,
+    DEFAULT_HISTORY_LOOKBACK_DAYS,
+    DEFAULT_HISTORY_SYNC_INTERVAL,
     DEFAULT_SUMMARY_POLL_INTERVAL,
     DOMAIN,
+    HISTORY_OVERLAP_DAYS,
 )
-from .models import FitorbData
+from .history_store import FitorbHistoryStore
+from .models import FitorbData, FitorbHistoryRequest
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,14 +34,27 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
         hass: HomeAssistant,
         entry: ConfigEntry,
         client: FitorbBleClient,
+        history_store: FitorbHistoryStore | None = None,
     ) -> None:
         self.entry = entry
         self.client = client
+        self.history_store = history_store or FitorbHistoryStore(hass, entry.entry_id)
         self.health_poll_interval = timedelta(
             minutes=int(
                 entry.options.get(
                     CONF_HEALTH_POLL_INTERVAL,
                     DEFAULT_HEALTH_POLL_INTERVAL.total_seconds() / 60,
+                )
+            )
+        )
+        self.history_lookback_days = int(
+            entry.options.get(CONF_HISTORY_LOOKBACK_DAYS, DEFAULT_HISTORY_LOOKBACK_DAYS)
+        )
+        self.history_sync_interval = timedelta(
+            minutes=int(
+                entry.options.get(
+                    CONF_HISTORY_SYNC_INTERVAL,
+                    DEFAULT_HISTORY_SYNC_INTERVAL.total_seconds() / 60,
                 )
             )
         )
@@ -63,10 +82,49 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
         include_health = self._health_poll_is_due()
         try:
             base = self.data or self.base_data
-            data = await self.client.async_read_current_data(
-                base,
-                include_health=include_health,
+            now = datetime.now(UTC)
+            history_request = (
+                self._build_history_request(now)
+                if self._history_sync_is_due(now)
+                else None
             )
+            if history_request is None:
+                data = await self.client.async_read_current_data(
+                    base,
+                    include_health=include_health,
+                )
+                history = None
+            else:
+                read_result = await self.client.async_read_current_data_with_history(
+                    base,
+                    include_health=include_health,
+                    history_request=history_request,
+                )
+                data = read_result.data
+                history = read_result.history
+            if history is not None:
+                try:
+                    await self.history_store.async_record_result(history, now)
+                    data = data.with_values(
+                        last_history_sync=now,
+                        last_history_sample_count=self.history_store.last_sample_count,
+                        last_history_status=history.status,
+                        last_history_first_sample=self.history_store.first_sample,
+                        last_history_last_sample=self.history_store.last_sample,
+                        history_unknown_packets=history.unknown_packets,
+                        history_malformed_packets=history.malformed_packets,
+                    )
+                except Exception as err:
+                    _LOGGER.debug(
+                        "Unable to persist Fitorb history sync result: %s",
+                        err,
+                    )
+                    data = data.with_values(
+                        last_history_sync=now,
+                        last_history_status="error",
+                        history_unknown_packets=history.unknown_packets,
+                        history_malformed_packets=history.malformed_packets,
+                    )
         except FitorbDeviceUnavailable as err:
             previous = self.data or self.base_data
             _LOGGER.debug("Fitorb ring is not currently connectable: %s", err)
@@ -77,7 +135,7 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
                 previous.with_values(available=False, last_error=str(err))
             )
             raise UpdateFailed(str(err)) from err
-        updated_at = datetime.now(UTC)
+        updated_at = now
         if include_health and _has_health_value(data):
             self.last_successful_health_poll = updated_at
         elif include_health:
@@ -90,6 +148,20 @@ class FitorbDataUpdateCoordinator(DataUpdateCoordinator[FitorbData]):
             last_error=None,
             last_successful_update=updated_at,
         )
+
+    def _history_sync_is_due(self, now: datetime) -> bool:
+        """Return whether history sync should run on this update."""
+        if self.history_store.last_sync is None:
+            return True
+        return now - self.history_store.last_sync >= self.history_sync_interval
+
+    def _build_history_request(self, now: datetime) -> FitorbHistoryRequest:
+        """Build history request days with a fixed overlap."""
+        lookback = max(1, self.history_lookback_days)
+        offsets = tuple(range(0, lookback + HISTORY_OVERLAP_DAYS))
+        today = now.date()
+        days = tuple(today - timedelta(days=offset) for offset in offsets)
+        return FitorbHistoryRequest(days=days, day_offsets=offsets)
 
     def _health_poll_is_due(self) -> bool:
         """Return whether health polling is due for this refresh."""

@@ -9,6 +9,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fitorb.const import (
     CONF_HEALTH_POLL_INTERVAL,
+    CONF_HISTORY_LOOKBACK_DAYS,
+    CONF_HISTORY_SYNC_INTERVAL,
     DOMAIN,
 )
 
@@ -46,6 +48,8 @@ async def test_manual_flow_creates_entry(hass) -> None:
     assert result["options"] == {
         CONF_SCAN_INTERVAL: 5,
         CONF_HEALTH_POLL_INTERVAL: 15,
+        CONF_HISTORY_LOOKBACK_DAYS: 7,
+        CONF_HISTORY_SYNC_INTERVAL: 360,
     }
 
 
@@ -96,6 +100,8 @@ async def test_bluetooth_confirm_creates_entry(hass: HomeAssistant) -> None:
     assert result["options"] == {
         CONF_SCAN_INTERVAL: 5,
         CONF_HEALTH_POLL_INTERVAL: 15,
+        CONF_HISTORY_LOOKBACK_DAYS: 7,
+        CONF_HISTORY_SYNC_INTERVAL: 360,
     }
 
 
@@ -128,3 +134,33 @@ async def test_bluetooth_confirm_aborts_if_device_was_configured(
 
     assert result["type"] is config_entries.FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+async def test_options_flow_updates_history_settings(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Ring",
+        data={CONF_ADDRESS: "AA:BB:CC:DD:EE:FF", CONF_NAME: "Ring"},
+        options={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_HEALTH_POLL_INTERVAL: 15,
+            CONF_HISTORY_LOOKBACK_DAYS: 7,
+            CONF_HISTORY_SYNC_INTERVAL: 360,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        flow["flow_id"],
+        user_input={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_HEALTH_POLL_INTERVAL: 15,
+            CONF_HISTORY_LOOKBACK_DAYS: 3,
+            CONF_HISTORY_SYNC_INTERVAL: 120,
+        },
+    )
+
+    assert result["type"] is config_entries.FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_HISTORY_LOOKBACK_DAYS] == 3
+    assert result["data"][CONF_HISTORY_SYNC_INTERVAL] == 120

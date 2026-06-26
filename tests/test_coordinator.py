@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, date
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -27,7 +27,10 @@ from custom_components.fitorb.coordinator import FitorbDataUpdateCoordinator
 from custom_components.fitorb.models import (
     FitorbData,
     FitorbHistoryRequest,
+    FitorbHistoryResult,
+    FitorbHistorySample,
     FitorbReadResult,
+    HistoryMetric,
     NotificationKind,
 )
 
@@ -37,21 +40,66 @@ class FakeRingClient:
         self,
         data: FitorbData | None = None,
         err: Exception | None = None,
+        read_result: FitorbReadResult | None = None,
     ) -> None:
         self.data = data
         self.err = err
+        self.read_result = read_result
         self.calls = 0
         self.include_health_calls: list[bool] = []
+        self.history_requests: list[FitorbHistoryRequest | None] = []
+
+    async def async_read_current_data_with_history(
+        self,
+        base: FitorbData,
+        *,
+        include_health: bool = True,
+        history_request: FitorbHistoryRequest | None = None,
+    ) -> FitorbReadResult:
+        self.calls += 1
+        self.include_health_calls.append(include_health)
+        self.history_requests.append(history_request)
+        if self.err is not None:
+            raise self.err
+        if self.read_result is not None:
+            return self.read_result
+        assert self.data is not None
+        return FitorbReadResult(data=self.data)
 
     async def async_read_current_data(
         self, base: FitorbData, *, include_health: bool = True
     ) -> FitorbData:
-        self.calls += 1
-        self.include_health_calls.append(include_health)
-        if self.err is not None:
-            raise self.err
-        assert self.data is not None
-        return self.data
+        return (
+            await self.async_read_current_data_with_history(
+                base,
+                include_health=include_health,
+                history_request=None,
+            )
+        ).data
+
+
+class FakeHistoryStore:
+    def __init__(self) -> None:
+        self.last_sync = None
+        self.last_sample_count = 0
+        self.first_sample = None
+        self.last_sample = None
+        self.recorded_results: list[FitorbHistoryResult] = []
+
+    async def async_load(self) -> None:
+        return None
+
+    async def async_record_result(
+        self,
+        result: FitorbHistoryResult,
+        synced_at: datetime,
+    ) -> tuple[FitorbHistorySample, ...]:
+        self.last_sync = synced_at
+        self.last_sample_count += len(result.samples)
+        self.first_sample = result.first_sample
+        self.last_sample = result.last_sample
+        self.recorded_results.append(result)
+        return result.samples
 
 
 @pytest.fixture
@@ -219,6 +267,56 @@ async def test_coordinator_uses_configured_summary_poll_interval(
 
     assert coordinator.update_interval != DEFAULT_SUMMARY_POLL_INTERVAL
     assert coordinator.update_interval.total_seconds() == 9 * 60
+
+
+async def test_coordinator_requests_history_when_due(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+) -> None:
+    sample = FitorbHistorySample(
+        metric=HistoryMetric.HEART_RATE,
+        timestamp=datetime(2026, 6, 26, 12, 0, tzinfo=UTC),
+        value=72,
+        source_day=date(2026, 6, 26),
+    )
+    history = FitorbHistoryResult(
+        samples=(sample,),
+        status="success",
+        requested_days=7,
+        first_sample=sample.timestamp,
+        last_sample=sample.timestamp,
+    )
+    client = FakeRingClient(
+        read_result=FitorbReadResult(
+            data=FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring", available=True),
+            history=history,
+        )
+    )
+    store = FakeHistoryStore()
+    coordinator = FitorbDataUpdateCoordinator(hass, entry, client, history_store=store)
+
+    result = await coordinator._async_update_data()
+
+    assert client.history_requests[0] is not None
+    assert client.history_requests[0].day_offsets[0] == 0
+    assert result.last_history_status == "success"
+    assert result.last_history_sample_count == 1
+
+
+async def test_coordinator_skips_history_when_not_due(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+) -> None:
+    client = FakeRingClient(
+        data=FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring", available=True)
+    )
+    store = FakeHistoryStore()
+    store.last_sync = datetime.now(UTC)
+    coordinator = FitorbDataUpdateCoordinator(hass, entry, client, history_store=store)
+
+    await coordinator._async_update_data()
+
+    assert client.history_requests == [None]
 
 
 def _battery_notification(level: int = 88, charging: bool = False) -> bytes:
@@ -961,6 +1059,7 @@ async def test_setup_entry_keeps_entry_loaded_on_first_refresh_failure(
     base_data = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
     fake_coordinator = SimpleNamespace(
         base_data=base_data,
+        history_store=SimpleNamespace(async_load=AsyncMock()),
         async_set_updated_data=AsyncMock(),
         async_config_entry_first_refresh=AsyncMock(
             side_effect=ConfigEntryNotReady("ring offline")
