@@ -17,7 +17,10 @@ Version 1 exposes current values as Home Assistant entities:
 - Last successful update
 - Connection state
 
-Historical sync and sleep import are intentionally not included in Version 1.
+Version 2 adds an experimental direct BLE history sync. It reads cached ring data
+when the ring returns to Home Assistant Bluetooth range, deduplicates samples
+locally, and exposes diagnostics so the real retention window can be measured on
+your ring firmware.
 
 ## Bluetooth Requirements
 
@@ -30,6 +33,23 @@ For Home Assistant in Proxmox:
 3. Restart the VM.
 4. In Home Assistant, add or verify the Bluetooth integration.
 5. Disconnect the ring from the phone app before first setup if the ring only accepts one active BLE connection.
+
+## Historical Sync
+
+Historical sync uses the same direct Bluetooth path as the live sensors. The ring
+must come back into range of the Home Assistant Bluetooth adapter or an active
+GATT-capable proxy before cached samples can be recovered. The phone app and the
+Home Assistant mobile app do not relay these BLE GATT reads.
+
+The default lookback is 7 days with a 1 day overlap. The exact retention window is
+firmware-dependent and not guaranteed by the public Colmi references. Use the
+diagnostic sensors `Last history sync`, `History sample count`, `First history
+sample`, and `Last history sample` to see what the ring actually returned.
+
+The first history release stores and deduplicates parsed samples for validation.
+It does not write old Home Assistant recorder state rows. Long-term statistics
+publishing will be added after the packet timestamps and units are confirmed with
+real hardware logs.
 
 ## Installation
 
@@ -48,6 +68,8 @@ logger:
 ```
 
 Debug logs may include raw BLE notification payloads in hexadecimal form.
+History debug logs may include raw historical BLE packets. These are useful when
+checking whether QRing sync changes what Home Assistant can later read.
 
 Heart rate, SpO2, and stress reads are best-effort. Some Fitorb/Colmi-compatible
 firmware versions do not answer the known live health commands, so the integration

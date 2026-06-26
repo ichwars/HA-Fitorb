@@ -20,6 +20,14 @@ def test_manifest_declares_bluetooth_dependency() -> None:
     assert manifest["bluetooth"][0]["connectable"] is True
 
 
+def test_manifest_version_is_history_release() -> None:
+    manifest = json.loads(
+        (ROOT / "custom_components" / "fitorb" / "manifest.json").read_text()
+    )
+
+    assert manifest["version"] == "0.2.0"
+
+
 def test_hacs_metadata_points_to_integration() -> None:
     hacs = json.loads((ROOT / "hacs.json").read_text())
 
