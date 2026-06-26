@@ -54,7 +54,8 @@ class FitorbHistoryStore:
         loaded = await self._store.async_load()
         if loaded is not None:
             self._data.update(loaded)
-        self._data.setdefault("samples", {})
+        if not isinstance(self._data.get("samples"), dict):
+            self._data["samples"] = {}
 
     async def async_record_result(
         self,
@@ -115,7 +116,10 @@ def _sample_to_json(sample: FitorbHistorySample) -> dict[str, Any]:
 def _parse_datetime(value: object) -> datetime | None:
     if not isinstance(value, str):
         return None
-    parsed = datetime.fromisoformat(value)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
