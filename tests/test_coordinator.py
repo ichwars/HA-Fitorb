@@ -325,14 +325,17 @@ async def test_ble_client_raises_when_expected_response_times_out() -> None:
         )
 
 
-async def test_setup_entry_propagates_first_refresh_failure(
+async def test_setup_entry_keeps_entry_loaded_on_first_refresh_failure(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     entry.add_to_hass(hass)
+    base_data = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
     fake_coordinator = SimpleNamespace(
+        base_data=base_data,
+        async_set_updated_data=AsyncMock(),
         async_config_entry_first_refresh=AsyncMock(
             side_effect=ConfigEntryNotReady("ring offline")
-        )
+        ),
     )
 
     with (
@@ -342,9 +345,19 @@ async def test_setup_entry_propagates_first_refresh_failure(
             "FitorbDataUpdateCoordinator",
             return_value=fake_coordinator,
         ),
-        pytest.raises(ConfigEntryNotReady, match="ring offline"),
+        patch.object(
+            hass.config_entries,
+            "async_forward_entry_setups",
+            AsyncMock(return_value=True),
+        ) as forward_setups,
     ):
-        await fitorb_init.async_setup_entry(hass, entry)
+        result = await fitorb_init.async_setup_entry(hass, entry)
 
+    assert result is True
     assert DOMAIN in hass.data
-    assert entry.entry_id not in hass.data[DOMAIN]
+    assert hass.data[DOMAIN][entry.entry_id] is fake_coordinator
+    fake_coordinator.async_set_updated_data.assert_called_once()
+    fallback = fake_coordinator.async_set_updated_data.call_args.args[0]
+    assert fallback.available is False
+    assert fallback.last_error == "ring offline"
+    forward_setups.assert_awaited_once_with(entry, fitorb_init.PLATFORMS)

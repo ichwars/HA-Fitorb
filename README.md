@@ -49,6 +49,15 @@ logger:
 
 Debug logs may include raw BLE notification payloads in hexadecimal form.
 
+## Troubleshooting
+
+### `org.bluez.Error.InProgress` or `Failed to connect after 12 attempt(s)`
+
+BlueZ is still busy with a BLE connection attempt, or the ring is already connected
+to another central device. Close the phone app, disconnect the ring from the phone
+Bluetooth settings if needed, wait 30-60 seconds, and reload the integration. If the
+error persists, restart the Home Assistant Bluetooth adapter or the HA VM.
+
 ## Known Limits
 
 - The phone app may need to be disconnected while Home Assistant polls the ring.

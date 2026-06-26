@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from .bluetooth import FitorbBleClient
 from .const import DOMAIN, PLATFORMS
 from .coordinator import FitorbDataUpdateCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -14,7 +19,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     client = FitorbBleClient(hass, entry.data[CONF_ADDRESS])
     coordinator = FitorbDataUpdateCoordinator(hass, entry, client)
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryNotReady as err:
+        _LOGGER.info(
+            "Fitorb ring is unavailable during setup and will be polled again: %s",
+            err,
+        )
+        coordinator.async_set_updated_data(
+            coordinator.base_data.with_values(available=False, last_error=str(err))
+        )
     hass.data[DOMAIN][entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
