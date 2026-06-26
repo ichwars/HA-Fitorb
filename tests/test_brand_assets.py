@@ -16,13 +16,21 @@ def _png_size(path: Path) -> tuple[int, int]:
 
 def test_brand_images_exist() -> None:
     assert (BRAND_DIR / "icon.png").is_file()
+    assert (BRAND_DIR / "icon@2x.png").is_file()
     assert (BRAND_DIR / "dark_icon.png").is_file()
+    assert (BRAND_DIR / "dark_icon@2x.png").is_file()
     assert (BRAND_DIR / "logo.png").is_file()
+    assert (BRAND_DIR / "logo@2x.png").is_file()
     assert (BRAND_DIR / "dark_logo.png").is_file()
+    assert (BRAND_DIR / "dark_logo@2x.png").is_file()
 
 
 def test_brand_images_have_expected_dimensions() -> None:
-    assert _png_size(BRAND_DIR / "icon.png") == (512, 512)
-    assert _png_size(BRAND_DIR / "dark_icon.png") == (512, 512)
-    assert _png_size(BRAND_DIR / "logo.png") == (1024, 512)
-    assert _png_size(BRAND_DIR / "dark_logo.png") == (1024, 512)
+    assert _png_size(BRAND_DIR / "icon.png") == (256, 256)
+    assert _png_size(BRAND_DIR / "icon@2x.png") == (512, 512)
+    assert _png_size(BRAND_DIR / "dark_icon.png") == (256, 256)
+    assert _png_size(BRAND_DIR / "dark_icon@2x.png") == (512, 512)
+    assert _png_size(BRAND_DIR / "logo.png") == (512, 256)
+    assert _png_size(BRAND_DIR / "logo@2x.png") == (1024, 512)
+    assert _png_size(BRAND_DIR / "dark_logo.png") == (512, 256)
+    assert _png_size(BRAND_DIR / "dark_logo@2x.png") == (1024, 512)

@@ -102,17 +102,16 @@ class FitorbBleClient:
                 snapshot,
                 expected_kind=NotificationKind.BATTERY,
             )
-            await client.write_gatt_char(
-                CMD_WRITE_CHAR_UUID,
-                build_command(COMMAND_SET_METRIC_UNITS),
+            await self._write_optional_command(
+                client,
+                COMMAND_SET_METRIC_UNITS,
+                description="metric units",
             )
-            await client.write_gatt_char(
-                CMD_WRITE_CHAR_UUID,
-                build_command(COMMAND_ACTIVITY),
-            )
-            snapshot = await self._drain_optional_response(
+            snapshot = await self._read_optional_command(
+                client,
                 queue,
                 snapshot,
+                command=COMMAND_ACTIVITY,
                 expected_kind=NotificationKind.ACTIVITY,
             )
             if include_health:
@@ -121,25 +120,61 @@ class FitorbBleClient:
                     (COMMAND_SPO2, NotificationKind.SPO2),
                     (COMMAND_STRESS, NotificationKind.STRESS),
                 ):
-                    await client.write_gatt_char(
-                        CMD_WRITE_CHAR_UUID,
-                        build_command(command),
-                    )
-                    snapshot = await self._drain_optional_response(
+                    snapshot = await self._read_optional_command(
+                        client,
                         queue,
                         snapshot,
+                        command=command,
                         expected_kind=expected_kind,
                     )
             return snapshot
         finally:
             try:
                 await client.stop_notify(CMD_NOTIFY_CHAR_UUID)
-            except Exception:
-                _LOGGER.debug("Unable to stop Fitorb notifications", exc_info=True)
+            except Exception as err:
+                _LOGGER.debug("Unable to stop Fitorb notifications: %s", err)
             try:
                 await client.disconnect()
-            except Exception:
-                _LOGGER.debug("Unable to disconnect Fitorb client", exc_info=True)
+            except Exception as err:
+                _LOGGER.debug("Unable to disconnect Fitorb client: %s", err)
+
+    async def _write_optional_command(
+        self,
+        client: BleakClient,
+        command: str,
+        *,
+        description: str,
+    ) -> None:
+        """Write a best-effort command that is not required for availability."""
+        try:
+            await client.write_gatt_char(CMD_WRITE_CHAR_UUID, build_command(command))
+        except Exception as err:
+            _LOGGER.debug("Unable to request optional Fitorb %s: %s", description, err)
+
+    async def _read_optional_command(
+        self,
+        client: BleakClient,
+        queue: asyncio.Queue[bytes],
+        snapshot: FitorbData,
+        *,
+        command: str,
+        expected_kind: NotificationKind,
+    ) -> FitorbData:
+        """Write and drain an optional command without losing current values."""
+        try:
+            await client.write_gatt_char(CMD_WRITE_CHAR_UUID, build_command(command))
+        except Exception as err:
+            _LOGGER.debug(
+                "Unable to request optional Fitorb %s data; keeping current values: %s",
+                expected_kind.value,
+                err,
+            )
+            return snapshot
+        return await self._drain_optional_response(
+            queue,
+            snapshot,
+            expected_kind=expected_kind,
+        )
 
     async def _drain_optional_response(
         self,
