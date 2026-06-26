@@ -1,0 +1,21 @@
+{
+  "domain": "fitorb",
+  "name": "Fitorb Smart Ring",
+  "after_dependencies": ["bluetooth"],
+  "bluetooth": [
+    { "local_name": "R02_*", "connectable": true },
+    { "local_name": "R03_*", "connectable": true },
+    { "local_name": "R04_*", "connectable": true },
+    { "local_name": "R05_*", "connectable": true },
+    { "local_name": "R06_*", "connectable": true }
+  ],
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["bluetooth"],
+  "documentation": "https://github.com/droth/ha-fitorb",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/droth/ha-fitorb/issues",
+  "requirements": ["bleak-retry-connector>=3.8.0"],
+  "version": "0.1.0"
+}
