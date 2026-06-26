@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from custom_components.fitorb.const import VERSION
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,12 +22,12 @@ def test_manifest_declares_bluetooth_dependency() -> None:
     assert manifest["bluetooth"][0]["connectable"] is True
 
 
-def test_manifest_version_is_history_release() -> None:
+def test_manifest_version_matches_runtime_version() -> None:
     manifest = json.loads(
         (ROOT / "custom_components" / "fitorb" / "manifest.json").read_text()
     )
 
-    assert manifest["version"] == "0.2.0"
+    assert manifest["version"] == VERSION
 
 
 def test_hacs_metadata_points_to_integration() -> None:

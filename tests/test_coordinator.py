@@ -528,6 +528,37 @@ async def test_ble_client_counts_malformed_notifications_separately() -> None:
     assert updated.battery_level == 91
 
 
+async def test_ble_client_treats_out_of_connection_slots_as_unavailable() -> None:
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(hass, "AA:BB:CC:DD:EE:FF", response_timeout=0.05)
+
+    with (
+        patch(
+            (
+                "custom_components.fitorb.bluetooth.bluetooth"
+                ".async_ble_device_from_address"
+            ),
+            return_value=object(),
+        ),
+        patch(
+            "custom_components.fitorb.bluetooth.establish_connection",
+            AsyncMock(
+                side_effect=Exception(
+                    "No backend with an available connection slot that can "
+                    "reach address AA:BB:CC:DD:EE:FF was found"
+                )
+            ),
+        ),
+    ):
+        with pytest.raises(
+            FitorbDeviceUnavailable,
+            match="available connection slot",
+        ):
+            await client.async_read_current_data(
+                FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+            )
+
+
 async def test_ble_client_battery_returns_after_expected_response() -> None:
     client = _test_client()
     queue: asyncio.Queue[bytes] = asyncio.Queue()
@@ -660,6 +691,60 @@ async def test_ble_client_keeps_battery_when_health_times_out() -> None:
     assert updated.heart_rate is None
     assert updated.spo2 is None
     assert updated.stress is None
+
+
+async def test_ble_client_skips_health_measurements_while_charging() -> None:
+    class FakeBleakClient:
+        def __init__(self) -> None:
+            self.handler = None
+            self.commands: list[bytes] = []
+
+        async def start_notify(self, _uuid, handler) -> None:
+            self.handler = handler
+
+        async def write_gatt_char(self, _uuid, payload: bytes) -> None:
+            self.commands.append(payload)
+            assert self.handler is not None
+            if payload[0] == 0x03:
+                self.handler(1, bytearray(_battery_notification(charging=True)))
+            elif payload[0] == 0x69:
+                raise AssertionError("Health commands should be skipped while charging")
+
+        async def stop_notify(self, _uuid) -> None:
+            return None
+
+        async def disconnect(self) -> None:
+            return None
+
+    fake_client = FakeBleakClient()
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(
+        hass,
+        "AA:BB:CC:DD:EE:FF",
+        response_timeout=0.05,
+    )
+
+    with (
+        patch(
+            (
+                "custom_components.fitorb.bluetooth.bluetooth"
+                ".async_ble_device_from_address"
+            ),
+            return_value=object(),
+        ),
+        patch(
+            "custom_components.fitorb.bluetooth.establish_connection",
+            AsyncMock(return_value=fake_client),
+        ),
+    ):
+        updated = await client.async_read_current_data(
+            FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring"),
+            include_health=True,
+        )
+
+    assert updated.available is True
+    assert updated.is_charging is True
+    assert not any(command[0] == 0x69 for command in fake_client.commands)
 
 
 async def test_ble_client_keeps_activity_when_optional_health_write_fails(

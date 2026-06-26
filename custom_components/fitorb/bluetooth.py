@@ -134,12 +134,17 @@ class FitorbBleClient:
         def _notification_handler(_sender: int, data: bytearray) -> None:
             queue.put_nowait(bytes(data))
 
-        client = await establish_connection(
-            BleakClient,
-            ble_device,
-            self.address,
-            timeout=self.connect_timeout,
-        )
+        try:
+            client = await establish_connection(
+                BleakClient,
+                ble_device,
+                self.address,
+                timeout=self.connect_timeout,
+            )
+        except Exception as err:
+            if _is_ble_connection_unavailable_error(err):
+                raise FitorbDeviceUnavailable(str(err)) from err
+            raise
         try:
             await client.start_notify(CMD_NOTIFY_CHAR_UUID, _notification_handler)
             snapshot = base.with_values(available=True, last_error=None)
@@ -166,7 +171,11 @@ class FitorbBleClient:
                     command=COMMAND_ACTIVITY,
                     expected_kind=NotificationKind.ACTIVITY,
                 )
-                if include_health:
+                if include_health and snapshot.is_charging is True:
+                    _LOGGER.debug(
+                        "Skipping Fitorb health reads because the ring is charging"
+                    )
+                elif include_health:
                     for command, expected_kind in (
                         (COMMAND_HEART_RATE, NotificationKind.HEART_RATE),
                         (COMMAND_SPO2, NotificationKind.SPO2),
@@ -660,5 +669,18 @@ def _is_ble_session_unavailable_error(err: Exception) -> bool:
             "device is not connected",
             "disconnected",
             "org.bluez.error.notconnected",
+        )
+    )
+
+
+def _is_ble_connection_unavailable_error(err: Exception) -> bool:
+    """Return whether an exception means no connectable BLE path is available."""
+    message = str(err).lower()
+    return any(
+        marker in message
+        for marker in (
+            "no backend with an available connection slot",
+            "out of connection slots",
+            "device is no longer reachable",
         )
     )

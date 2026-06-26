@@ -16,7 +16,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .coordinator import FitorbDataUpdateCoordinator
 from .models import FitorbData
 
@@ -210,13 +210,16 @@ class FitorbSensorEntity(CoordinatorEntity[FitorbDataUpdateCoordinator], SensorE
             "name": coordinator.base_data.name,
             "manufacturer": "Fitorb",
             "model": "Colmi-compatible Smart Ring",
+            "sw_version": VERSION,
         }
 
     @property
     def available(self) -> bool:
         """Return entity availability."""
         data = self.coordinator.data
-        return bool(data and data.available)
+        if data is None:
+            return False
+        return data.available or self.entity_description.value_fn(data) is not None
 
     @property
     def native_value(self) -> StateType:

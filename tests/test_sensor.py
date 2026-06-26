@@ -13,7 +13,7 @@ from custom_components.fitorb.binary_sensor import (
     BINARY_SENSOR_DESCRIPTIONS,
     FitorbBinarySensorEntity,
 )
-from custom_components.fitorb.const import DOMAIN
+from custom_components.fitorb.const import DOMAIN, VERSION
 from custom_components.fitorb.models import FitorbData
 from custom_components.fitorb.sensor import FitorbSensorEntity, SENSOR_DESCRIPTIONS
 
@@ -71,6 +71,52 @@ def test_battery_sensor_value(hass: HomeAssistant) -> None:
     assert entity.available is True
 
 
+def test_sensor_device_info_includes_integration_version(
+    hass: HomeAssistant,
+) -> None:
+    data = FitorbData(
+        address="AA:BB:CC:DD:EE:FF",
+        name="Ring",
+        available=True,
+        battery_level=72,
+    )
+    coordinator = FakeCoordinator(hass, data)
+    entity = FitorbSensorEntity(coordinator, "battery_level")
+
+    assert entity.device_info["sw_version"] == VERSION
+
+
+def test_sensor_with_cached_value_stays_available_when_ring_disconnected(
+    hass: HomeAssistant,
+) -> None:
+    data = FitorbData(
+        address="AA:BB:CC:DD:EE:FF",
+        name="Ring",
+        available=False,
+        battery_level=72,
+    )
+    coordinator = FakeCoordinator(hass, data)
+    entity = FitorbSensorEntity(coordinator, "battery_level")
+
+    assert entity.native_value == 72
+    assert entity.available is True
+
+
+def test_sensor_without_cached_value_is_unavailable_when_ring_disconnected(
+    hass: HomeAssistant,
+) -> None:
+    data = FitorbData(
+        address="AA:BB:CC:DD:EE:FF",
+        name="Ring",
+        available=False,
+    )
+    coordinator = FakeCoordinator(hass, data)
+    entity = FitorbSensorEntity(coordinator, "heart_rate")
+
+    assert entity.native_value is None
+    assert entity.available is False
+
+
 def test_last_update_sensor_value(hass: HomeAssistant) -> None:
     stamp = datetime(2026, 6, 26, 1, 2, 3, tzinfo=UTC)
     data = FitorbData(
@@ -97,6 +143,37 @@ def test_charging_binary_sensor_value(hass: HomeAssistant) -> None:
 
     assert entity.unique_id == "aabbccddeeff_is_charging"
     assert entity.is_on is True
+
+
+def test_binary_sensor_device_info_includes_integration_version(
+    hass: HomeAssistant,
+) -> None:
+    data = FitorbData(
+        address="AA:BB:CC:DD:EE:FF",
+        name="Ring",
+        available=True,
+        is_charging=True,
+    )
+    coordinator = FakeCoordinator(hass, data)
+    entity = FitorbBinarySensorEntity(coordinator, "is_charging")
+
+    assert entity.device_info["sw_version"] == VERSION
+
+
+def test_charging_binary_sensor_with_cached_value_stays_available_when_disconnected(
+    hass: HomeAssistant,
+) -> None:
+    data = FitorbData(
+        address="AA:BB:CC:DD:EE:FF",
+        name="Ring",
+        available=False,
+        is_charging=True,
+    )
+    coordinator = FakeCoordinator(hass, data)
+    entity = FitorbBinarySensorEntity(coordinator, "is_charging")
+
+    assert entity.is_on is True
+    assert entity.available is True
 
 
 @pytest.mark.parametrize(
