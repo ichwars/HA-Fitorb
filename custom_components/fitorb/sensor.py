@@ -86,6 +86,39 @@ SENSOR_DESCRIPTIONS: dict[str, FitorbSensorDescription] = {
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: data.last_successful_update,
     ),
+    "last_history_sync": FitorbSensorDescription(
+        key="last_history_sync",
+        translation_key="last_history_sync",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.last_history_sync,
+    ),
+    "last_history_sample_count": FitorbSensorDescription(
+        key="last_history_sample_count",
+        translation_key="last_history_sample_count",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.last_history_sample_count,
+    ),
+    "last_history_status": FitorbSensorDescription(
+        key="last_history_status",
+        translation_key="last_history_status",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.last_history_status,
+    ),
+    "last_history_first_sample": FitorbSensorDescription(
+        key="last_history_first_sample",
+        translation_key="last_history_first_sample",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.last_history_first_sample,
+    ),
+    "last_history_last_sample": FitorbSensorDescription(
+        key="last_history_last_sample",
+        translation_key="last_history_last_sample",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.last_history_last_sample,
+    ),
 }
 
 

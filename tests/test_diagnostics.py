@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -15,6 +17,13 @@ class FakeCoordinator:
         name="Ring",
         available=True,
         last_error="Failed to connect to AA:BB:CC:DD:EE:FF via 11:22:33:44:55:66",
+        last_history_sync=datetime(2026, 6, 26, 3, 0, tzinfo=UTC),
+        last_history_sample_count=24,
+        last_history_status="success",
+        last_history_first_sample=datetime(2026, 6, 25, 0, 0, tzinfo=UTC),
+        last_history_last_sample=datetime(2026, 6, 26, 0, 0, tzinfo=UTC),
+        history_unknown_packets=2,
+        history_malformed_packets=1,
         unknown_notifications=2,
         malformed_notifications=1,
     )
@@ -42,3 +51,12 @@ async def test_diagnostics_redacts_address(hass: HomeAssistant) -> None:
     )
     assert diagnostics["unknown_notifications"] == 2
     assert diagnostics["malformed_notifications"] == 1
+    assert diagnostics["history"] == {
+        "last_sync": "2026-06-26T03:00:00+00:00",
+        "sample_count": 24,
+        "status": "success",
+        "first_sample": "2026-06-25T00:00:00+00:00",
+        "last_sample": "2026-06-26T00:00:00+00:00",
+        "unknown_packets": 2,
+        "malformed_packets": 1,
+    }

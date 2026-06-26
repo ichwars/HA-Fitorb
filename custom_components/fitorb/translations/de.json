@@ -31,11 +31,26 @@
       "heart_rate": { "name": "Herzfrequenz" },
       "spo2": { "name": "SpO2" },
       "stress": { "name": "Stress" },
-      "last_successful_update": { "name": "Letzte erfolgreiche Aktualisierung" }
+      "last_successful_update": { "name": "Letzte erfolgreiche Aktualisierung" },
+      "last_history_sync": { "name": "Letzter History-Sync" },
+      "last_history_sample_count": { "name": "History-Samples" },
+      "last_history_status": { "name": "History-Sync-Status" },
+      "last_history_first_sample": { "name": "Erstes History-Sample" },
+      "last_history_last_sample": { "name": "Letztes History-Sample" }
     },
     "binary_sensor": {
       "is_charging": { "name": "Lädt" },
       "connection_state": { "name": "Verbindung" }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "history_lookback_days": "History-Zeitraum in Tagen",
+          "history_sync_interval": "History-Sync-Intervall"
+        }
+      }
     }
   }
 }

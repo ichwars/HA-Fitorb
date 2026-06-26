@@ -39,6 +39,11 @@ def _sample_data() -> FitorbData:
         spo2=97,
         stress=12,
         last_successful_update=datetime(2026, 6, 26, 1, 2, 3, tzinfo=UTC),
+        last_history_sync=datetime(2026, 6, 26, 3, 0, tzinfo=UTC),
+        last_history_sample_count=24,
+        last_history_status="success",
+        last_history_first_sample=datetime(2026, 6, 25, 0, 0, tzinfo=UTC),
+        last_history_last_sample=datetime(2026, 6, 26, 0, 0, tzinfo=UTC),
     )
 
 
@@ -106,6 +111,29 @@ def test_charging_binary_sensor_value(hass: HomeAssistant) -> None:
             "last_successful_update",
             datetime(2026, 6, 26, 1, 2, 3, tzinfo=UTC),
             "last_successful_update",
+            None,
+            "timestamp",
+        ),
+        (
+            "last_history_sync",
+            datetime(2026, 6, 26, 3, 0, tzinfo=UTC),
+            "last_history_sync",
+            None,
+            "timestamp",
+        ),
+        ("last_history_sample_count", 24, "last_history_sample_count", None, None),
+        ("last_history_status", "success", "last_history_status", None, None),
+        (
+            "last_history_first_sample",
+            datetime(2026, 6, 25, 0, 0, tzinfo=UTC),
+            "last_history_first_sample",
+            None,
+            "timestamp",
+        ),
+        (
+            "last_history_last_sample",
+            datetime(2026, 6, 26, 0, 0, tzinfo=UTC),
+            "last_history_last_sample",
             None,
             "timestamp",
         ),
