@@ -579,25 +579,42 @@ async def test_ble_client_health_running_state_extends_timeout() -> None:
     assert updated.heart_rate == 72
 
 
-async def test_ble_client_health_no_value_response_logs_raw_payload(caplog) -> None:
-    client = _test_client()
-    queue: asyncio.Queue[bytes] = asyncio.Queue()
-    await queue.put(
-        bytes([0x69, 0x01, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x6A])
+async def test_ble_client_health_no_value_response_extends_timeout(caplog) -> None:
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(
+        hass,
+        "AA:BB:CC:DD:EE:FF",
+        response_timeout=5,
+        health_response_timeout=0.05,
+        health_measurement_timeout=0.5,
     )
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
     snapshot = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
     caplog.set_level("DEBUG", logger="custom_components.fitorb.bluetooth")
 
-    updated = await client._drain_optional_response(
-        queue,
-        snapshot,
-        expected_kind=NotificationKind.HEART_RATE,
-    )
+    async def _enqueue_measurement() -> None:
+        await queue.put(
+            bytes([0x69, 0x01, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x6A])
+        )
+        await asyncio.sleep(0.12)
+        await queue.put(_health_notification(0x01, running=False, value=72))
 
-    assert updated is snapshot
-    assert caplog.records[-1].message == (
-        "Fitorb heart_rate response did not include a value: "
+    task = asyncio.create_task(_enqueue_measurement())
+    updated = await asyncio.wait_for(
+        client._drain_optional_response(
+            queue,
+            snapshot,
+            expected_kind=NotificationKind.HEART_RATE,
+        ),
+        timeout=1,
+    )
+    await task
+
+    assert updated.heart_rate == 72
+    assert (
+        "Fitorb heart_rate response did not include a value yet: "
         "6901000000000000000000000000006a"
+        in [record.message for record in caplog.records]
     )
 
 

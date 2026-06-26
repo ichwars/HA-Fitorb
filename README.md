@@ -54,7 +54,8 @@ firmware versions do not answer the known live health commands, so the integrati
 uses a short optional timeout until a measurement starts, then waits longer for
 the final value while keeping battery/activity values. Until the first live health
 value is observed, Home Assistant retries health reads on every summary poll.
-Debug logging shows raw health packets when the ring answers without a value.
+Debug logging shows raw health packets when the ring answers without an immediate
+value; the integration keeps waiting for a later live value in the same poll.
 
 ## Troubleshooting
 

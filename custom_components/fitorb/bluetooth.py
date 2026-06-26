@@ -293,16 +293,26 @@ class FitorbBleClient:
                 )
                 continue
             snapshot = _apply_notification(snapshot, parsed.kind, parsed.values)
-            if _is_expected_response(parsed.kind, parsed.values, expected):
-                if _is_health_response_without_value(
+            if (
+                parsed.kind is expected
+                and _is_health_response_without_value(
                     parsed.kind,
                     parsed.values,
+                )
+            ):
+                _LOGGER.debug(
+                    "Fitorb %s response did not include a value yet: %s",
+                    parsed.kind.value,
+                    parsed.raw_hex,
+                )
+                if (
+                    measurement_deadline is not None
+                    and not measurement_deadline_enabled
                 ):
-                    _LOGGER.debug(
-                        "Fitorb %s response did not include a value: %s",
-                        parsed.kind.value,
-                        parsed.raw_hex,
-                    )
+                    end_time = max(end_time, measurement_deadline)
+                    measurement_deadline_enabled = True
+                continue
+            if _is_expected_response(parsed.kind, parsed.values, expected):
                 return snapshot
             if (
                 parsed.kind is expected
@@ -359,7 +369,10 @@ def _is_expected_response(
     if kind is not expected_kind:
         return False
     if expected_kind in _HEALTH_NOTIFICATION_KINDS:
-        return values.get("running") is False
+        return (
+            values.get("running") is False
+            and not _is_health_response_without_value(kind, values)
+        )
     return True
 
 
