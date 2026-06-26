@@ -101,6 +101,8 @@ class FitorbConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         address = _normalize_address(self._discovery.address)
         name = self._discovery.name or DEFAULT_NAME
         if user_input is not None:
+            await self.async_set_unique_id(address)
+            self._abort_if_unique_id_configured()
             return self.async_create_entry(
                 title=name,
                 data={CONF_ADDRESS: address, CONF_NAME: name},
