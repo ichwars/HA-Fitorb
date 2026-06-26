@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Fitorb Smart Ring",
+        "description": "Enter the Bluetooth address of the ring.",
+        "data": {
+          "address": "Bluetooth address",
+          "name": "Name"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Set up {name}",
+        "description": "Add this Fitorb/Colmi-compatible smart ring to Home Assistant?"
+      }
+    },
+    "error": {
+      "invalid_address": "Enter a Bluetooth MAC address such as AA:BB:CC:DD:EE:FF."
+    },
+    "abort": {
+      "already_configured": "This ring is already configured.",
+      "no_discovery_info": "Bluetooth discovery information is no longer available."
+    }
+  }
+}
