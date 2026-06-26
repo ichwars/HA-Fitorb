@@ -4,7 +4,7 @@ from .models import NotificationKind, ParsedNotification
 
 COMMAND_BATTERY = "03"
 COMMAND_SET_METRIC_UNITS = "0a0200"
-COMMAND_ACTIVITY = "43"
+COMMAND_ACTIVITY = "43000f005f01"
 COMMAND_HEART_RATE = "6901"
 COMMAND_SPO2 = "6903"
 COMMAND_STRESS = "6908"
@@ -31,6 +31,69 @@ def build_command(hex_payload: str) -> bytes:
 
 def _ensure_16(data: bytes) -> bool:
     return len(data) == 16
+
+
+def _bcd_to_decimal(value: int) -> int:
+    return (((value >> 4) & 0x0F) * 10) + (value & 0x0F)
+
+
+class ActivityLogParser:
+    """Parse the multi-packet Colmi 0x43 steps log response."""
+
+    def __init__(self) -> None:
+        self._reset()
+
+    def _reset(self) -> None:
+        self._new_calorie_protocol = False
+        self._steps = 0
+        self._calories_raw = 0
+        self._distance = 0
+
+    def parse(self, data: bytes | bytearray) -> ParsedNotification | None:
+        """Return an activity notification when the 0x43 response is complete."""
+        payload = bytes(data)
+        if not _ensure_16(payload) or payload[0] != 0x43:
+            return None
+
+        if payload[1] == 0xFF:
+            self._reset()
+            return ParsedNotification(
+                kind=NotificationKind.ACTIVITY,
+                values={"steps": 0, "calories": 0, "distance": 0},
+                raw_hex=payload.hex(),
+            )
+
+        if payload[1] == 0xF0:
+            self._new_calorie_protocol = payload[3] == 0x01
+            return None
+
+        month = _bcd_to_decimal(payload[2])
+        day = _bcd_to_decimal(payload[3])
+        if not (1 <= month <= 12 and 1 <= day <= 31):
+            return None
+
+        calories = payload[7] | (payload[8] << 8)
+        if self._new_calorie_protocol:
+            calories *= 10
+        self._calories_raw += calories
+        self._steps += payload[9] | (payload[10] << 8)
+        self._distance += payload[11] | (payload[12] << 8)
+
+        is_last_packet = payload[5] == payload[6] - 1
+        if not is_last_packet:
+            return None
+
+        values = {
+            "steps": self._steps,
+            "calories": self._calories_raw // 1000,
+            "distance": self._distance,
+        }
+        self._reset()
+        return ParsedNotification(
+            kind=NotificationKind.ACTIVITY,
+            values=values,
+            raw_hex=payload.hex(),
+        )
 
 
 def _parse_health_result(

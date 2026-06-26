@@ -290,6 +290,55 @@ async def test_ble_client_activity_returns_after_expected_response() -> None:
     assert queue.qsize() == 1
 
 
+async def test_ble_client_keeps_battery_when_activity_times_out() -> None:
+    class FakeBleakClient:
+        def __init__(self) -> None:
+            self.handler = None
+
+        async def start_notify(self, _uuid, handler) -> None:
+            self.handler = handler
+
+        async def write_gatt_char(self, _uuid, payload: bytes) -> None:
+            if payload[0] == 0x03:
+                assert self.handler is not None
+                self.handler(1, bytearray(_battery_notification(level=82)))
+
+        async def stop_notify(self, _uuid) -> None:
+            return None
+
+        async def disconnect(self) -> None:
+            return None
+
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(
+        hass,
+        "AA:BB:CC:DD:EE:FF",
+        response_timeout=0.05,
+    )
+
+    with (
+        patch(
+            (
+                "custom_components.fitorb.bluetooth.bluetooth"
+                ".async_ble_device_from_address"
+            ),
+            return_value=object(),
+        ),
+        patch(
+            "custom_components.fitorb.bluetooth.establish_connection",
+            AsyncMock(return_value=FakeBleakClient()),
+        ),
+    ):
+        updated = await client.async_read_current_data(
+            FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring"),
+            include_health=False,
+        )
+
+    assert updated.available is True
+    assert updated.battery_level == 82
+    assert updated.steps is None
+
+
 async def test_ble_client_health_waits_for_final_result() -> None:
     client = _test_client()
     queue: asyncio.Queue[bytes] = asyncio.Queue()

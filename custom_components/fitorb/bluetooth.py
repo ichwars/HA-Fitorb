@@ -17,6 +17,7 @@ from .const import (
 )
 from .models import FitorbData, NotificationKind
 from .protocol import (
+    ActivityLogParser,
     COMMAND_ACTIVITY,
     COMMAND_BATTERY,
     COMMAND_HEART_RATE,
@@ -109,11 +110,17 @@ class FitorbBleClient:
                 CMD_WRITE_CHAR_UUID,
                 build_command(COMMAND_ACTIVITY),
             )
-            snapshot = await self._drain_until_expected(
-                queue,
-                snapshot,
-                expected_kind=NotificationKind.ACTIVITY,
-            )
+            try:
+                snapshot = await self._drain_until_expected(
+                    queue,
+                    snapshot,
+                    expected_kind=NotificationKind.ACTIVITY,
+                )
+            except FitorbResponseTimeout:
+                _LOGGER.debug(
+                    "No Fitorb activity response; keeping other current values",
+                    exc_info=True,
+                )
             if include_health:
                 for command, expected_kind in (
                     (COMMAND_HEART_RATE, NotificationKind.HEART_RATE),
@@ -149,6 +156,9 @@ class FitorbBleClient:
     ) -> FitorbData:
         """Drain notifications until the expected response is received."""
         expected = NotificationKind(expected_kind)
+        activity_log_parser = (
+            ActivityLogParser() if expected is NotificationKind.ACTIVITY else None
+        )
         end_time = self.hass.loop.time() + self.response_timeout
         while self.hass.loop.time() < end_time:
             timeout = max(0.1, end_time - self.hass.loop.time())
@@ -163,6 +173,14 @@ class FitorbBleClient:
                 )
                 continue
             parsed = parse_notification(payload)
+            if (
+                parsed is None
+                and activity_log_parser is not None
+                and payload[0] == 0x43
+            ):
+                parsed = activity_log_parser.parse(payload)
+                if parsed is None:
+                    continue
             if parsed is None:
                 _LOGGER.debug("Unknown Fitorb notification: %s", payload.hex())
                 snapshot = snapshot.with_values(
