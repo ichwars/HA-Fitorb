@@ -33,7 +33,7 @@ For Home Assistant in Proxmox:
 
 ## Installation
 
-Copy `custom_components/fitorb` into Home Assistant's `custom_components` directory or add this repository as a HACS custom repository.
+Copy `custom_components/fitorb` into Home Assistant's `custom_components` directory or add `https://github.com/ichwars/HA-Fitorb` as a HACS custom repository.
 
 Restart Home Assistant, then add **Fitorb Smart Ring** from **Settings > Devices & services**.
 
@@ -54,3 +54,7 @@ Debug logs may include raw BLE notification payloads in hexadecimal form.
 - The phone app may need to be disconnected while Home Assistant polls the ring.
 - Calories and distance units should be verified against real ring data.
 - Unknown BLE packets are logged for analysis and ignored by Version 1.
+
+## License
+
+MIT
