@@ -64,6 +64,7 @@ class FitorbBinarySensorEntity(
     """Represent a Fitorb binary sensor."""
 
     entity_description: FitorbBinarySensorDescription
+    _attr_has_entity_name = True
 
     def __init__(self, coordinator: FitorbDataUpdateCoordinator, key: str) -> None:
         super().__init__(coordinator)
