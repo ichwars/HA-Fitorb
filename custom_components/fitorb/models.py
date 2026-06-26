@@ -10,6 +10,7 @@ class NotificationKind(StrEnum):
     """Known ring notification classes."""
 
     BATTERY = "battery"
+    UNITS_PREFERENCE = "units_preference"
     ACTIVITY = "activity"
     HEART_RATE = "heart_rate"
     SPO2 = "spo2"

@@ -159,7 +159,6 @@ class FitorbBleClient:
             _LOGGER.debug(
                 "No Fitorb %s response; keeping other current values",
                 expected_kind.value,
-                exc_info=True,
             )
             return snapshot
 
@@ -223,6 +222,8 @@ def _apply_notification(
             battery_level=values["battery_level"],
             is_charging=values["is_charging"],
         )
+    if kind is NotificationKind.UNITS_PREFERENCE:
+        return snapshot
     if kind is NotificationKind.ACTIVITY:
         return snapshot.with_values(
             steps=values["steps"],

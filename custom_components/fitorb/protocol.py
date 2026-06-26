@@ -133,6 +133,13 @@ def parse_notification(data: bytes | bytearray) -> ParsedNotification | None:
             raw_hex=payload.hex(),
         )
 
+    if payload[0] == 0x0A:
+        return ParsedNotification(
+            kind=NotificationKind.UNITS_PREFERENCE,
+            values={"metric": payload[1] == 0x02},
+            raw_hex=payload.hex(),
+        )
+
     if payload[0] == 0x73 and payload[1] == 0x12:
         steps = (payload[2] << 16) | (payload[3] << 8) | payload[4]
         calories = ((payload[5] << 16) | (payload[6] << 8) | payload[7]) // 1000

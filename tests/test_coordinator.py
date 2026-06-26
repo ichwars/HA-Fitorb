@@ -211,6 +211,14 @@ def _unknown_notification() -> bytes:
     return bytes(payload)
 
 
+def _units_preference_notification() -> bytes:
+    payload = bytearray(16)
+    payload[0] = 0x0A
+    payload[1] = 0x02
+    payload[15] = 0x0C
+    return bytes(payload)
+
+
 def _malformed_notification() -> bytes:
     return bytes([0x03, 0x01, 0x00])
 
@@ -234,6 +242,23 @@ async def test_ble_client_counts_unknown_notifications_without_failing() -> None
     )
 
     assert updated.unknown_notifications == 1
+    assert updated.battery_level == 91
+
+
+async def test_ble_client_ignores_units_preference_ack() -> None:
+    client = _test_client()
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    await queue.put(_units_preference_notification())
+    await queue.put(_battery_notification(level=91))
+    snapshot = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+
+    updated = await client._drain_until_expected(
+        queue,
+        snapshot,
+        expected_kind=NotificationKind.BATTERY,
+    )
+
+    assert updated.unknown_notifications == 0
     assert updated.battery_level == 91
 
 
@@ -388,6 +413,25 @@ async def test_ble_client_keeps_battery_when_health_times_out() -> None:
     assert updated.heart_rate is None
     assert updated.spo2 is None
     assert updated.stress is None
+
+
+async def test_ble_client_optional_timeout_logs_without_traceback(caplog) -> None:
+    client = _test_client()
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    snapshot = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+    caplog.set_level("DEBUG", logger="custom_components.fitorb.bluetooth")
+
+    updated = await client._drain_optional_response(
+        queue,
+        snapshot,
+        expected_kind=NotificationKind.HEART_RATE,
+    )
+
+    assert updated is snapshot
+    assert caplog.records[-1].message == (
+        "No Fitorb heart_rate response; keeping other current values"
+    )
+    assert caplog.records[-1].exc_info is None
 
 
 async def test_ble_client_health_waits_for_final_result() -> None:

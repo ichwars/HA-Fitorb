@@ -44,6 +44,16 @@ def test_parse_direct_battery_response() -> None:
     assert parsed.values == {"battery_level": 71, "is_charging": True}
 
 
+def test_parse_units_preference_response() -> None:
+    parsed = parse_notification(
+        bytes([0x0A, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x0C])
+    )
+
+    assert parsed is not None
+    assert parsed.kind is NotificationKind.UNITS_PREFERENCE
+    assert parsed.values == {"metric": True}
+
+
 def test_parse_activity_summary() -> None:
     parsed = parse_notification(
         bytes([0x73, 0x12, 0, 11, 239, 2, 34, 9, 0, 7, 207, 0, 0, 0, 0, 130])
