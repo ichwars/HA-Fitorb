@@ -12,7 +12,11 @@ from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
     CONF_HEALTH_POLL_INTERVAL,
+    CONF_HISTORY_LOOKBACK_DAYS,
+    CONF_HISTORY_SYNC_INTERVAL,
     DEFAULT_HEALTH_POLL_INTERVAL,
+    DEFAULT_HISTORY_LOOKBACK_DAYS,
+    DEFAULT_HISTORY_SYNC_INTERVAL,
     DEFAULT_NAME,
     DEFAULT_SUMMARY_POLL_INTERVAL,
     DOMAIN,
@@ -35,6 +39,10 @@ def _default_options() -> dict[str, int]:
         CONF_HEALTH_POLL_INTERVAL: int(
             DEFAULT_HEALTH_POLL_INTERVAL.total_seconds() / 60
         ),
+        CONF_HISTORY_LOOKBACK_DAYS: DEFAULT_HISTORY_LOOKBACK_DAYS,
+        CONF_HISTORY_SYNC_INTERVAL: int(
+            DEFAULT_HISTORY_SYNC_INTERVAL.total_seconds() / 60
+        ),
     }
 
 
@@ -45,6 +53,13 @@ class FitorbConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._discovery: BluetoothServiceInfoBleak | None = None
+
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return FitorbOptionsFlow(config_entry)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -112,4 +127,44 @@ class FitorbConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="bluetooth_confirm",
             description_placeholders={"name": name},
+        )
+
+
+class FitorbOptionsFlow(config_entries.OptionsFlow):
+    """Handle Fitorb options."""
+
+    def __init__(self, entry: config_entries.ConfigEntry) -> None:
+        self.entry = entry
+
+    async def async_step_init(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Manage Fitorb polling options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        options = {**_default_options(), **self.entry.options}
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_SCAN_INTERVAL,
+                        default=options[CONF_SCAN_INTERVAL],
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+                    vol.Required(
+                        CONF_HEALTH_POLL_INTERVAL,
+                        default=options[CONF_HEALTH_POLL_INTERVAL],
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=120)),
+                    vol.Required(
+                        CONF_HISTORY_LOOKBACK_DAYS,
+                        default=options[CONF_HISTORY_LOOKBACK_DAYS],
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=14)),
+                    vol.Required(
+                        CONF_HISTORY_SYNC_INTERVAL,
+                        default=options[CONF_HISTORY_SYNC_INTERVAL],
+                    ): vol.All(vol.Coerce(int), vol.Range(min=30, max=1440)),
+                }
+            ),
         )

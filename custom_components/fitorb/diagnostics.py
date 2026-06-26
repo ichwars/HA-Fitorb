@@ -35,6 +35,10 @@ def _redact_last_error(last_error: str | None, configured_address: str) -> str |
     )
 
 
+def _iso_or_none(value: Any) -> str | None:
+    return value.isoformat() if value else None
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -56,4 +60,27 @@ async def async_get_config_entry_diagnostics(
         ),
         "unknown_notifications": data.unknown_notifications if data else 0,
         "malformed_notifications": data.malformed_notifications if data else 0,
+        "history": {
+            "last_sync": _iso_or_none(data.last_history_sync) if data else None,
+            "sample_count": data.last_history_sample_count if data else None,
+            "status": data.last_history_status if data else None,
+            "first_sample": _iso_or_none(data.last_history_first_sample)
+            if data
+            else None,
+            "last_sample": _iso_or_none(data.last_history_last_sample)
+            if data
+            else None,
+            "unknown_packets": data.history_unknown_packets if data else 0,
+            "malformed_packets": data.history_malformed_packets if data else 0,
+        },
+        "sleep": {
+            "start": _iso_or_none(data.sleep_start) if data else None,
+            "end": _iso_or_none(data.sleep_end) if data else None,
+            "duration_minutes": data.sleep_duration_minutes if data else None,
+            "asleep_minutes": data.sleep_asleep_minutes if data else None,
+            "awake_minutes": data.sleep_awake_minutes if data else None,
+            "light_minutes": data.sleep_light_minutes if data else None,
+            "deep_minutes": data.sleep_deep_minutes if data else None,
+            "rem_minutes": data.sleep_rem_minutes if data else None,
+        },
     }

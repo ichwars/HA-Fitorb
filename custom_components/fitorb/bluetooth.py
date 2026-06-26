@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 import logging
 
 from bleak import BleakClient
@@ -16,8 +17,27 @@ from .const import (
     DEFAULT_HEALTH_MEASUREMENT_TIMEOUT,
     DEFAULT_HEALTH_RESPONSE_TIMEOUT,
     DEFAULT_RESPONSE_TIMEOUT,
+    RAW_NOTIFY_CHAR_UUID,
+    RAW_WRITE_CHAR_UUID,
 )
-from .models import FitorbData, NotificationKind
+from .history_protocol import (
+    BIG_DATA_SLEEP_ID,
+    BigDataFrame,
+    BigDataFrameParser,
+    build_big_data_request,
+    build_heart_rate_history_command,
+    parse_heart_rate_history_packets,
+    parse_sleep_history_payload,
+)
+from .models import (
+    FitorbData,
+    FitorbHistoryRequest,
+    FitorbHistoryResult,
+    FitorbHistorySample,
+    FitorbReadResult,
+    FitorbSleepSummary,
+    NotificationKind,
+)
 from .protocol import (
     ActivityLogParser,
     COMMAND_ACTIVITY,
@@ -82,6 +102,21 @@ class FitorbBleClient:
         include_health: bool = True,
     ) -> FitorbData:
         """Connect to the ring and read the Version 1 current values."""
+        result = await self.async_read_current_data_with_history(
+            base,
+            include_health=include_health,
+            history_request=None,
+        )
+        return result.data
+
+    async def async_read_current_data_with_history(
+        self,
+        base: FitorbData,
+        *,
+        include_health: bool = True,
+        history_request: FitorbHistoryRequest | None = None,
+    ) -> FitorbReadResult:
+        """Connect to the ring and read current values plus optional history."""
         ble_device = bluetooth.async_ble_device_from_address(
             self.hass,
             self.address,
@@ -138,7 +173,14 @@ class FitorbBleClient:
                         command=command,
                         expected_kind=expected_kind,
                     )
-            return snapshot
+            history_result = None
+            if history_request is not None:
+                history_result = await self._read_history(
+                    queue,
+                    client,
+                    history_request,
+                )
+            return FitorbReadResult(data=snapshot, history=history_result)
         finally:
             try:
                 await client.stop_notify(CMD_NOTIFY_CHAR_UUID)
@@ -239,6 +281,113 @@ class FitorbBleClient:
             )
             return snapshot
 
+    async def _read_history(
+        self,
+        queue: asyncio.Queue[bytes],
+        client: BleakClient,
+        request: FitorbHistoryRequest,
+    ) -> FitorbHistoryResult:
+        """Read supported history packet families without failing live values."""
+        samples = []
+        unknown_packets = 0
+        malformed_packets = 0
+        sleep_summary: FitorbSleepSummary | None = None
+        status = "success"
+        for target_day in request.days:
+            try:
+                await client.write_gatt_char(
+                    CMD_WRITE_CHAR_UUID,
+                    build_heart_rate_history_command(target_day),
+                )
+                packets, completed, day_unknown_packets, day_malformed_packets = (
+                    await self._drain_history_packets(
+                        queue,
+                        expected_command=0x15,
+                    )
+                )
+                unknown_packets += day_unknown_packets
+                malformed_packets += day_malformed_packets
+                if not completed:
+                    status = "partial"
+                try:
+                    samples.extend(parse_heart_rate_history_packets(packets))
+                except Exception as err:
+                    _LOGGER.debug(
+                        "Unable to parse Fitorb heart_rate history for %s: %s",
+                        target_day.isoformat(),
+                        err,
+                    )
+                    status = "partial"
+            except Exception as err:
+                _LOGGER.debug(
+                    "Unable to read Fitorb heart_rate history for %s: %s",
+                    target_day.isoformat(),
+                    err,
+                )
+                status = "partial"
+                continue
+        try:
+            sleep_samples, sleep_summary, sleep_unknown, sleep_malformed = (
+                await self._read_sleep_history(client)
+            )
+            samples.extend(sleep_samples)
+            unknown_packets += sleep_unknown
+            malformed_packets += sleep_malformed
+        except Exception as err:
+            _LOGGER.debug("Unable to read Fitorb sleep history: %s", err)
+            status = "partial"
+
+        ordered = tuple(sorted(samples, key=lambda sample: sample.timestamp))
+        return FitorbHistoryResult(
+            samples=ordered,
+            status=status,
+            requested_days=len(request.days),
+            first_sample=ordered[0].timestamp if ordered else None,
+            last_sample=ordered[-1].timestamp if ordered else None,
+            sleep_summary=sleep_summary,
+            unknown_packets=unknown_packets,
+            malformed_packets=malformed_packets,
+        )
+
+    async def _read_sleep_history(
+        self,
+        client: BleakClient,
+    ) -> tuple[list[FitorbHistorySample], FitorbSleepSummary | None, int, int]:
+        """Read Colmi Big Data sleep history from the raw GATT service."""
+        raw_queue: asyncio.Queue[bytes] = asyncio.Queue()
+
+        def _raw_notification_handler(_sender: int, data: bytearray) -> None:
+            raw_queue.put_nowait(bytes(data))
+
+        await client.start_notify(RAW_NOTIFY_CHAR_UUID, _raw_notification_handler)
+        try:
+            await client.write_gatt_char(
+                RAW_WRITE_CHAR_UUID,
+                build_big_data_request(BIG_DATA_SLEEP_ID),
+            )
+            frames, unknown_packets, malformed_packets = (
+                await self._drain_big_data_frames(
+                    raw_queue,
+                    expected_data_id=BIG_DATA_SLEEP_ID,
+                )
+            )
+            samples: list[FitorbHistorySample] = []
+            summary = None
+            today = date.today()
+            for frame in frames:
+                parsed = parse_sleep_history_payload(frame.payload, today=today)
+                samples.extend(parsed.samples)
+                if parsed.summary is not None and (
+                    summary is None or parsed.summary.start > summary.start
+                ):
+                    summary = parsed.summary
+            return samples, summary, unknown_packets, malformed_packets
+        finally:
+            try:
+                await client.stop_notify(RAW_NOTIFY_CHAR_UUID)
+            except Exception as err:
+                _LOGGER.debug("Unable to stop Fitorb raw notifications: %s", err)
+
     async def _drain_until_expected(
         self,
         queue: asyncio.Queue[bytes],
@@ -330,6 +479,79 @@ class FitorbBleClient:
         raise FitorbResponseTimeout(
             f"Timed out waiting for Fitorb {expected.value.replace('_', ' ')} response"
         )
+
+    async def _drain_history_packets(
+        self,
+        queue: asyncio.Queue[bytes],
+        *,
+        expected_command: int,
+    ) -> tuple[list[bytes], bool, int, int]:
+        """Drain history packets until a parser-visible end or timeout."""
+        packets: list[bytes] = []
+        unknown_packets = 0
+        malformed_packets = 0
+        completed = False
+        end_time = self.hass.loop.time() + self.response_timeout
+        while self.hass.loop.time() < end_time:
+            timeout = max(0.1, end_time - self.hass.loop.time())
+            try:
+                payload = await asyncio.wait_for(queue.get(), timeout=timeout)
+            except TimeoutError:
+                break
+            if len(payload) != 16:
+                _LOGGER.debug("Malformed Fitorb history notification: %s", payload.hex())
+                malformed_packets += 1
+                continue
+            if payload[0] != expected_command:
+                _LOGGER.debug("Unknown Fitorb history notification: %s", payload.hex())
+                unknown_packets += 1
+                continue
+            packets.append(payload)
+            if payload[1] == 0xFF:
+                completed = True
+                break
+            if payload[1] > 0 and packets and packets[0][1] == 0:
+                expected_packets = packets[0][2]
+                if expected_packets and payload[1] >= expected_packets - 1:
+                    completed = True
+                    break
+        return packets, completed, unknown_packets, malformed_packets
+
+    async def _drain_big_data_frames(
+        self,
+        queue: asyncio.Queue[bytes],
+        *,
+        expected_data_id: int,
+    ) -> tuple[list[BigDataFrame], int, int]:
+        """Drain raw Big Data frames until an expected frame or timeout."""
+        parser = BigDataFrameParser()
+        frames: list[BigDataFrame] = []
+        unknown_packets = 0
+        malformed_packets = 0
+        end_time = self.hass.loop.time() + self.response_timeout
+        while self.hass.loop.time() < end_time:
+            timeout = max(0.1, end_time - self.hass.loop.time())
+            try:
+                payload = await asyncio.wait_for(queue.get(), timeout=timeout)
+            except TimeoutError:
+                break
+            if not payload:
+                malformed_packets += 1
+                continue
+            parsed_frames = parser.consume(payload)
+            if not parsed_frames and payload[0] != 0xBC:
+                malformed_packets += 1
+                continue
+            for frame in parsed_frames:
+                if frame.data_id == expected_data_id:
+                    frames.append(frame)
+                else:
+                    unknown_packets += 1
+            if frames:
+                return frames, unknown_packets, malformed_packets
+        if frames or unknown_packets or malformed_packets:
+            return frames, unknown_packets, malformed_packets
+        raise FitorbResponseTimeout("Timed out waiting for Fitorb sleep history")
 
 
 def _apply_notification(
