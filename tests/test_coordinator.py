@@ -1363,6 +1363,27 @@ async def test_ble_client_history_counts_unknown_and_malformed_packets() -> None
     assert len(packets) == 2
 
 
+async def test_ble_client_history_ignores_interleaved_live_health_packets() -> None:
+    client = _test_client()
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    await queue.put(_health_notification(0x08, running=False, value=30))
+    await queue.put(bytes([21, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28]))
+    await queue.put(_health_notification(0x08, running=False, value=37))
+    await queue.put(bytes([21, 1, 0, 193, 61, 106, 72, 0, 0, 0, 0, 0, 75, 0, 0, 211]))
+
+    packets, completed, unknown_packets, malformed_packets = (
+        await client._drain_history_packets(
+            queue,
+            expected_command=0x15,
+        )
+    )
+
+    assert completed is True
+    assert unknown_packets == 0
+    assert malformed_packets == 0
+    assert len(packets) == 2
+
+
 async def test_ble_client_history_timeout_reports_packet_counters() -> None:
     class FakeBleakClient:
         def __init__(self) -> None:

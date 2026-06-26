@@ -566,6 +566,13 @@ class FitorbBleClient:
                 _LOGGER.debug("Malformed Fitorb history notification: %s", payload.hex())
                 malformed_packets += 1
                 continue
+            parsed = parse_notification(payload)
+            if parsed is not None and parsed.kind in _HEALTH_NOTIFICATION_KINDS:
+                _LOGGER.debug(
+                    "Ignoring interleaved Fitorb %s notification during history read",
+                    parsed.kind.value,
+                )
+                continue
             if payload[0] != expected_command:
                 _LOGGER.debug("Unknown Fitorb history notification: %s", payload.hex())
                 unknown_packets += 1
