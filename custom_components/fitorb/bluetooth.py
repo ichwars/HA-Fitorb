@@ -283,16 +283,30 @@ class FitorbBleClient:
         malformed_packets = 0
         status = "success"
         for target_day in request.days:
-            packets: list[bytes] = []
             try:
                 await client.write_gatt_char(
                     CMD_WRITE_CHAR_UUID,
                     build_heart_rate_history_command(target_day),
                 )
-                packets = await self._drain_history_packets(
-                    queue,
-                    expected_command=0x15,
+                packets, completed, day_unknown_packets, day_malformed_packets = (
+                    await self._drain_history_packets(
+                        queue,
+                        expected_command=0x15,
+                    )
                 )
+                unknown_packets += day_unknown_packets
+                malformed_packets += day_malformed_packets
+                if not completed:
+                    status = "partial"
+                try:
+                    samples.extend(parse_heart_rate_history_packets(packets))
+                except Exception as err:
+                    _LOGGER.debug(
+                        "Unable to parse Fitorb heart_rate history for %s: %s",
+                        target_day.isoformat(),
+                        err,
+                    )
+                    status = "partial"
             except Exception as err:
                 _LOGGER.debug(
                     "Unable to read Fitorb heart_rate history for %s: %s",
@@ -301,7 +315,6 @@ class FitorbBleClient:
                 )
                 status = "partial"
                 continue
-            samples.extend(parse_heart_rate_history_packets(packets))
         ordered = tuple(sorted(samples, key=lambda sample: sample.timestamp))
         return FitorbHistoryResult(
             samples=ordered,
@@ -410,9 +423,12 @@ class FitorbBleClient:
         queue: asyncio.Queue[bytes],
         *,
         expected_command: int,
-    ) -> list[bytes]:
+    ) -> tuple[list[bytes], bool, int, int]:
         """Drain history packets until a parser-visible end or timeout."""
         packets: list[bytes] = []
+        unknown_packets = 0
+        malformed_packets = 0
+        completed = False
         end_time = self.hass.loop.time() + self.response_timeout
         while self.hass.loop.time() < end_time:
             timeout = max(0.1, end_time - self.hass.loop.time())
@@ -422,20 +438,24 @@ class FitorbBleClient:
                 break
             if len(payload) != 16:
                 _LOGGER.debug("Malformed Fitorb history notification: %s", payload.hex())
+                malformed_packets += 1
                 continue
             if payload[0] != expected_command:
                 _LOGGER.debug("Unknown Fitorb history notification: %s", payload.hex())
+                unknown_packets += 1
                 continue
             packets.append(payload)
             if payload[1] == 0xFF:
+                completed = True
                 break
             if payload[1] > 0 and packets and packets[0][1] == 0:
                 expected_packets = packets[0][2]
                 if expected_packets and payload[1] >= expected_packets - 1:
+                    completed = True
                     break
         if not packets:
             raise FitorbResponseTimeout("Timed out waiting for Fitorb history response")
-        return packets
+        return packets, completed, unknown_packets, malformed_packets
 
 
 def _apply_notification(
