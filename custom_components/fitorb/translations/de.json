@@ -21,5 +21,21 @@
       "already_configured": "Dieser Ring ist bereits eingerichtet.",
       "no_discovery_info": "Die Bluetooth-Erkennungsdaten sind nicht mehr verfügbar."
     }
+  },
+  "entity": {
+    "sensor": {
+      "battery_level": { "name": "Akku" },
+      "steps": { "name": "Schritte heute" },
+      "calories": { "name": "Kalorien heute" },
+      "distance": { "name": "Distanz heute" },
+      "heart_rate": { "name": "Herzfrequenz" },
+      "spo2": { "name": "SpO2" },
+      "stress": { "name": "Stress" },
+      "last_successful_update": { "name": "Letzte erfolgreiche Aktualisierung" }
+    },
+    "binary_sensor": {
+      "is_charging": { "name": "Lädt" },
+      "connection_state": { "name": "Verbindung" }
+    }
   }
 }

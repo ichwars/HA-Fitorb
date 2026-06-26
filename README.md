@@ -1,0 +1,56 @@
+# Fitorb Smart Ring for Home Assistant
+
+Custom Home Assistant integration for Fitorb smart rings that appear compatible with the Colmi R02-R06 BLE protocol.
+
+## Scope
+
+Version 1 exposes current values as Home Assistant entities:
+
+- Battery level
+- Charging state
+- Steps today
+- Calories today
+- Distance today
+- Heart rate
+- SpO2
+- Stress
+- Last successful update
+- Connection state
+
+Historical sync and sleep import are intentionally not included in Version 1.
+
+## Bluetooth Requirements
+
+Home Assistant must be able to make active BLE GATT connections to the ring. A Shelly Bluetooth proxy is not enough for this integration because Shelly devices forward advertisements but do not proxy active GATT connections.
+
+For Home Assistant in Proxmox:
+
+1. Plug a supported USB Bluetooth adapter into the Proxmox host.
+2. Pass the USB device through to the Home Assistant VM.
+3. Restart the VM.
+4. In Home Assistant, add or verify the Bluetooth integration.
+5. Disconnect the ring from the phone app before first setup if the ring only accepts one active BLE connection.
+
+## Installation
+
+Copy `custom_components/fitorb` into Home Assistant's `custom_components` directory or add this repository as a HACS custom repository.
+
+Restart Home Assistant, then add **Fitorb Smart Ring** from **Settings > Devices & services**.
+
+## Debug Logging
+
+Add this to `configuration.yaml` when collecting logs:
+
+```yaml
+logger:
+  logs:
+    custom_components.fitorb: debug
+```
+
+Debug logs may include raw BLE notification payloads in hexadecimal form.
+
+## Known Limits
+
+- The phone app may need to be disconnected while Home Assistant polls the ring.
+- Calories and distance units should be verified against real ring data.
+- Unknown BLE packets are logged for analysis and ignored by Version 1.
