@@ -49,6 +49,10 @@ logger:
 
 Debug logs may include raw BLE notification payloads in hexadecimal form.
 
+Heart rate, SpO2, and stress reads are best-effort. Some Fitorb/Colmi-compatible
+firmware versions do not answer the known live health commands, so the integration
+uses a short optional timeout for those reads and keeps battery/activity values.
+
 ## Troubleshooting
 
 ### `org.bluez.Error.InProgress` or `Failed to connect after 12 attempt(s)`
@@ -61,6 +65,8 @@ error persists, restart the Home Assistant Bluetooth adapter or the HA VM.
 ## Known Limits
 
 - The phone app may need to be disconnected while Home Assistant polls the ring.
+- Heart rate, SpO2, and stress may stay unknown until the live health command
+  format for this ring firmware is confirmed.
 - Calories and distance units should be verified against real ring data.
 - Unknown BLE packets are logged for analysis and ignored by Version 1.
 

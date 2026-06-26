@@ -504,6 +504,29 @@ async def test_ble_client_optional_timeout_logs_without_traceback(caplog) -> Non
     assert caplog.records[-1].exc_info is None
 
 
+async def test_ble_client_health_optional_timeout_uses_short_timeout() -> None:
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(
+        hass,
+        "AA:BB:CC:DD:EE:FF",
+        response_timeout=5,
+        health_response_timeout=0.05,
+    )
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    snapshot = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+
+    updated = await asyncio.wait_for(
+        client._drain_optional_response(
+            queue,
+            snapshot,
+            expected_kind=NotificationKind.HEART_RATE,
+        ),
+        timeout=0.5,
+    )
+
+    assert updated is snapshot
+
+
 async def test_ble_client_health_waits_for_final_result() -> None:
     client = _test_client()
     queue: asyncio.Queue[bytes] = asyncio.Queue()

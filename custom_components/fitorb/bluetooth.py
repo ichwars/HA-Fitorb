@@ -13,6 +13,7 @@ from .const import (
     CMD_NOTIFY_CHAR_UUID,
     CMD_WRITE_CHAR_UUID,
     DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_HEALTH_RESPONSE_TIMEOUT,
     DEFAULT_RESPONSE_TIMEOUT,
 )
 from .models import FitorbData, NotificationKind
@@ -58,11 +59,13 @@ class FitorbBleClient:
         *,
         connect_timeout: float = DEFAULT_CONNECT_TIMEOUT,
         response_timeout: float = DEFAULT_RESPONSE_TIMEOUT,
+        health_response_timeout: float = DEFAULT_HEALTH_RESPONSE_TIMEOUT,
     ) -> None:
         self.hass = hass
         self.address = address
         self.connect_timeout = connect_timeout
         self.response_timeout = response_timeout
+        self.health_response_timeout = health_response_timeout
 
     async def async_read_current_data(
         self,
@@ -174,6 +177,11 @@ class FitorbBleClient:
             queue,
             snapshot,
             expected_kind=expected_kind,
+            response_timeout=(
+                self.health_response_timeout
+                if expected_kind in _HEALTH_NOTIFICATION_KINDS
+                else self.response_timeout
+            ),
         )
 
     async def _drain_optional_response(
@@ -182,13 +190,21 @@ class FitorbBleClient:
         snapshot: FitorbData,
         *,
         expected_kind: NotificationKind,
+        response_timeout: float | None = None,
     ) -> FitorbData:
         """Drain an optional command response without failing the whole snapshot."""
+        if (
+            response_timeout is None
+            and expected_kind in _HEALTH_NOTIFICATION_KINDS
+        ):
+            response_timeout = self.health_response_timeout
         try:
             return await self._drain_until_expected(
                 queue,
                 snapshot,
                 expected_kind=expected_kind,
+                response_timeout=response_timeout,
+                log_timeout=False,
             )
         except FitorbResponseTimeout:
             _LOGGER.debug(
@@ -203,13 +219,18 @@ class FitorbBleClient:
         snapshot: FitorbData,
         *,
         expected_kind: NotificationKind | str,
+        response_timeout: float | None = None,
+        log_timeout: bool = True,
     ) -> FitorbData:
         """Drain notifications until the expected response is received."""
         expected = NotificationKind(expected_kind)
         activity_log_parser = (
             ActivityLogParser() if expected is NotificationKind.ACTIVITY else None
         )
-        end_time = self.hass.loop.time() + self.response_timeout
+        timeout_seconds = self.response_timeout
+        if response_timeout is not None:
+            timeout_seconds = response_timeout
+        end_time = self.hass.loop.time() + timeout_seconds
         while self.hass.loop.time() < end_time:
             timeout = max(0.1, end_time - self.hass.loop.time())
             try:
@@ -240,7 +261,11 @@ class FitorbBleClient:
             snapshot = _apply_notification(snapshot, parsed.kind, parsed.values)
             if _is_expected_response(parsed.kind, parsed.values, expected):
                 return snapshot
-        _LOGGER.debug("No Fitorb %s response before command timeout", expected.value)
+        if log_timeout:
+            _LOGGER.debug(
+                "No Fitorb %s response before command timeout",
+                expected.value,
+            )
         raise FitorbResponseTimeout(
             f"Timed out waiting for Fitorb {expected.value.replace('_', ' ')} response"
         )
