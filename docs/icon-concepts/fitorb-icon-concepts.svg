@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Fitorb Home Assistant icon concepts</title>
+  <desc id="desc">Five icon proposals for the Fitorb Home Assistant custom integration.</desc>
+  <defs>
+    <style>
+      .title { font: 700 42px Arial, sans-serif; fill: #172635; }
+      .subtitle { font: 400 19px Arial, sans-serif; fill: #596675; }
+      .card-title { font: 700 25px Arial, sans-serif; fill: #172635; }
+      .card-text { font: 400 17px Arial, sans-serif; fill: #687485; }
+      .card-number { font: 700 14px Arial, sans-serif; fill: #8793a3; letter-spacing: 1px; }
+      .card { fill: #ffffff; stroke: #dce4ee; stroke-width: 2; }
+      .shadow { filter: url(#cardShadow); }
+      .stroke-round { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#1c2b36" flood-opacity="0.10"/>
+    </filter>
+    <linearGradient id="ringTealBlue" x1="80" y1="80" x2="432" y2="432" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#16c7b8"/>
+      <stop offset="1" stop-color="#3268e8"/>
+    </linearGradient>
+    <linearGradient id="ringBlueViolet" x1="70" y1="420" x2="430" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#11b7c8"/>
+      <stop offset="0.55" stop-color="#4077ff"/>
+      <stop offset="1" stop-color="#805ad5"/>
+    </linearGradient>
+    <linearGradient id="ringCoralGold" x1="90" y1="90" x2="430" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff5d73"/>
+      <stop offset="1" stop-color="#f5b64a"/>
+    </linearGradient>
+    <linearGradient id="ringGoldTeal" x1="80" y1="90" x2="430" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7c948"/>
+      <stop offset="1" stop-color="#14b8a6"/>
+    </linearGradient>
+    <linearGradient id="ringGreenIndigo" x1="88" y1="430" x2="430" y2="84" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3ecf8e"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+
+    <symbol id="icon-ha-ring" viewBox="0 0 512 512">
+      <circle cx="256" cy="256" r="176" fill="none" stroke="#e8eef5" stroke-width="58"/>
+      <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ringTealBlue)" stroke-width="44"/>
+      <circle cx="256" cy="256" r="118" fill="#ffffff"/>
+      <path d="M153 265 256 174 359 265" class="stroke-round" stroke="#172635" stroke-width="30"/>
+      <path d="M184 253v92h144v-92" class="stroke-round" stroke="#172635" stroke-width="30"/>
+      <path d="M241 345v-58h30v58" class="stroke-round" stroke="#16c7b8" stroke-width="24"/>
+      <circle cx="339" cy="164" r="18" fill="#3268e8"/>
+      <circle cx="369" cy="200" r="11" fill="#16c7b8"/>
+    </symbol>
+
+    <symbol id="icon-ble-ring" viewBox="0 0 512 512">
+      <circle cx="256" cy="256" r="176" fill="none" stroke="#edf2f7" stroke-width="58"/>
+      <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ringBlueViolet)" stroke-width="44"/>
+      <path d="M236 157 318 222 236 287V157Z" class="stroke-round" stroke="#172635" stroke-width="27"/>
+      <path d="M236 355 318 290 236 225v130Z" class="stroke-round" stroke="#172635" stroke-width="27"/>
+      <path d="M190 207 236 256 190 305" class="stroke-round" stroke="#4077ff" stroke-width="24"/>
+      <path d="M338 182c34 33 52 74 52 74s-18 41-52 74" class="stroke-round" stroke="#11b7c8" stroke-width="20"/>
+      <path d="M154 189c-30 28-47 67-47 67s17 39 47 67" class="stroke-round" stroke="#805ad5" stroke-width="18"/>
+    </symbol>
+
+    <symbol id="icon-health-pulse" viewBox="0 0 512 512">
+      <circle cx="256" cy="256" r="176" fill="none" stroke="#f3edf1" stroke-width="58"/>
+      <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ringCoralGold)" stroke-width="44"/>
+      <path d="M167 267c-39-43-6-102 46-76 17 9 29 23 43 44 14-21 26-35 43-44 52-26 85 33 46 76l-89 87-89-87Z" fill="#ffffff" stroke="#e8505b" stroke-linejoin="round" stroke-width="22"/>
+      <path d="M125 281h65l25-45 42 91 29-62h101" class="stroke-round" stroke="#172635" stroke-width="20"/>
+      <circle cx="373" cy="160" r="13" fill="#f5b64a"/>
+      <circle cx="143" cy="354" r="13" fill="#ff5d73"/>
+    </symbol>
+
+    <symbol id="icon-sensor-orbit" viewBox="0 0 512 512">
+      <circle cx="256" cy="256" r="176" fill="none" stroke="#f4f2e7" stroke-width="58"/>
+      <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ringGoldTeal)" stroke-width="44"/>
+      <circle cx="256" cy="256" r="68" fill="#172635"/>
+      <circle cx="256" cy="256" r="24" fill="#ffffff"/>
+      <path d="M256 150v82M344 203l-69 41M344 309l-69-41M256 362v-82M168 309l69-41M168 203l69 41" class="stroke-round" stroke="#9fb0c3" stroke-width="15"/>
+      <circle cx="256" cy="142" r="28" fill="#f7c948"/>
+      <circle cx="348" cy="195" r="28" fill="#14b8a6"/>
+      <circle cx="348" cy="317" r="28" fill="#3268e8"/>
+      <circle cx="256" cy="370" r="28" fill="#f97366"/>
+      <circle cx="164" cy="317" r="28" fill="#805ad5"/>
+      <circle cx="164" cy="195" r="28" fill="#36cfc9"/>
+    </symbol>
+
+    <symbol id="icon-health-shield" viewBox="0 0 512 512">
+      <circle cx="256" cy="256" r="176" fill="none" stroke="#ebf3f0" stroke-width="58"/>
+      <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ringGreenIndigo)" stroke-width="44"/>
+      <path d="M256 152 351 190v78c0 64-37 111-95 139-58-28-95-75-95-139v-78l95-38Z" fill="#172635" stroke="#ffffff" stroke-width="18" stroke-linejoin="round"/>
+      <path d="M209 268c-23-26-2-60 29-44 8 4 14 11 18 19 4-8 10-15 18-19 31-16 52 18 29 44l-47 46-47-46Z" fill="#ffffff"/>
+      <path d="M256 190v-28M256 406v-28M352 256h28M132 256h28" class="stroke-round" stroke="#3ecf8e" stroke-width="18"/>
+      <circle cx="374" cy="171" r="13" fill="#4f46e5"/>
+      <circle cx="137" cy="341" r="13" fill="#3ecf8e"/>
+    </symbol>
+  </defs>
+
+  <rect width="1600" height="900" fill="#f6f8fb"/>
+  <text x="80" y="82" class="title">Fitorb Home Assistant Icon Concepts</text>
+  <text x="80" y="118" class="subtitle">Five standalone directions for the custom integration icon.</text>
+
+  <g class="shadow" transform="translate(62 176)">
+    <rect class="card" width="260" height="560" rx="22"/>
+    <use href="#icon-ha-ring" x="34" y="58" width="192" height="192"/>
+    <text x="34" y="306" class="card-number">01</text>
+    <text x="34" y="344" class="card-title">HA Ring</text>
+    <text x="34" y="382" class="card-text">House signal inside</text>
+    <text x="34" y="408" class="card-text">a smart ring.</text>
+  </g>
+
+  <g class="shadow" transform="translate(372 176)">
+    <rect class="card" width="260" height="560" rx="22"/>
+    <use href="#icon-ble-ring" x="34" y="58" width="192" height="192"/>
+    <text x="34" y="306" class="card-number">02</text>
+    <text x="34" y="344" class="card-title">BLE Ring</text>
+    <text x="34" y="382" class="card-text">Direct local Bluetooth</text>
+    <text x="34" y="408" class="card-text">readout.</text>
+  </g>
+
+  <g class="shadow" transform="translate(682 176)">
+    <rect class="card" width="260" height="560" rx="22"/>
+    <use href="#icon-health-pulse" x="34" y="58" width="192" height="192"/>
+    <text x="34" y="306" class="card-number">03</text>
+    <text x="34" y="344" class="card-title">Health Pulse</text>
+    <text x="34" y="382" class="card-text">Vitals as the main</text>
+    <text x="34" y="408" class="card-text">integration promise.</text>
+  </g>
+
+  <g class="shadow" transform="translate(992 176)">
+    <rect class="card" width="260" height="560" rx="22"/>
+    <use href="#icon-sensor-orbit" x="34" y="58" width="192" height="192"/>
+    <text x="34" y="306" class="card-number">04</text>
+    <text x="34" y="344" class="card-title">Sensor Orbit</text>
+    <text x="34" y="382" class="card-text">Multiple entities from</text>
+    <text x="34" y="408" class="card-text">one wearable.</text>
+  </g>
+
+  <g class="shadow" transform="translate(1302 176)">
+    <rect class="card" width="260" height="560" rx="22"/>
+    <use href="#icon-health-shield" x="34" y="58" width="192" height="192"/>
+    <text x="34" y="306" class="card-number">05</text>
+    <text x="34" y="344" class="card-title">Health Shield</text>
+    <text x="34" y="382" class="card-text">Local private health</text>
+    <text x="34" y="408" class="card-text">telemetry.</text>
+  </g>
+</svg>

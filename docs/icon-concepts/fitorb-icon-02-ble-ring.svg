@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Fitorb Bluetooth ring icon concept">
+  <defs>
+    <linearGradient id="ring" x1="70" y1="420" x2="430" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#11b7c8"/>
+      <stop offset="0.55" stop-color="#4077ff"/>
+      <stop offset="1" stop-color="#805ad5"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#edf2f7" stroke-width="58"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ring)" stroke-width="44"/>
+  <path d="M236 157 318 222 236 287V157Z" fill="none" stroke="#172635" stroke-width="27" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M236 355 318 290 236 225v130Z" fill="none" stroke="#172635" stroke-width="27" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M190 207 236 256 190 305" fill="none" stroke="#4077ff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M338 182c34 33 52 74 52 74s-18 41-52 74" fill="none" stroke="#11b7c8" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M154 189c-30 28-47 67-47 67s17 39 47 67" fill="none" stroke="#805ad5" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

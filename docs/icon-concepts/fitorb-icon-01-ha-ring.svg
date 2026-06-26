@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Fitorb HA Ring icon concept">
+  <defs>
+    <linearGradient id="ring" x1="80" y1="80" x2="432" y2="432" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#16c7b8"/>
+      <stop offset="1" stop-color="#3268e8"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#e8eef5" stroke-width="58"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ring)" stroke-width="44"/>
+  <circle cx="256" cy="256" r="118" fill="#ffffff"/>
+  <path d="M153 265 256 174 359 265" fill="none" stroke="#172635" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M184 253v92h144v-92" fill="none" stroke="#172635" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M241 345v-58h30v58" fill="none" stroke="#16c7b8" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="339" cy="164" r="18" fill="#3268e8"/>
+  <circle cx="369" cy="200" r="11" fill="#16c7b8"/>
+</svg>

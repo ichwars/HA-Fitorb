@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Fitorb health shield icon concept">
+  <defs>
+    <linearGradient id="ring" x1="88" y1="430" x2="430" y2="84" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3ecf8e"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#ebf3f0" stroke-width="58"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ring)" stroke-width="44"/>
+  <path d="M256 152 351 190v78c0 64-37 111-95 139-58-28-95-75-95-139v-78l95-38Z" fill="#172635" stroke="#ffffff" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M209 268c-23-26-2-60 29-44 8 4 14 11 18 19 4-8 10-15 18-19 31-16 52 18 29 44l-47 46-47-46Z" fill="#ffffff"/>
+  <path d="M256 190v-28M256 406v-28M352 256h28M132 256h28" fill="none" stroke="#3ecf8e" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="374" cy="171" r="13" fill="#4f46e5"/>
+  <circle cx="137" cy="341" r="13" fill="#3ecf8e"/>
+</svg>

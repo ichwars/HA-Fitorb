@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Fitorb health pulse icon concept">
+  <defs>
+    <linearGradient id="ring" x1="90" y1="90" x2="430" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff5d73"/>
+      <stop offset="1" stop-color="#f5b64a"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#f3edf1" stroke-width="58"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ring)" stroke-width="44"/>
+  <path d="M167 267c-39-43-6-102 46-76 17 9 29 23 43 44 14-21 26-35 43-44 52-26 85 33 46 76l-89 87-89-87Z" fill="#ffffff" stroke="#e8505b" stroke-width="22" stroke-linejoin="round"/>
+  <path d="M125 281h65l25-45 42 91 29-62h101" fill="none" stroke="#172635" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="373" cy="160" r="13" fill="#f5b64a"/>
+  <circle cx="143" cy="354" r="13" fill="#ff5d73"/>
+</svg>

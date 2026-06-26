@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Fitorb sensor orbit icon concept">
+  <defs>
+    <linearGradient id="ring" x1="80" y1="90" x2="430" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7c948"/>
+      <stop offset="1" stop-color="#14b8a6"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#f4f2e7" stroke-width="58"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="url(#ring)" stroke-width="44"/>
+  <circle cx="256" cy="256" r="68" fill="#172635"/>
+  <circle cx="256" cy="256" r="24" fill="#ffffff"/>
+  <path d="M256 150v82M344 203l-69 41M344 309l-69-41M256 362v-82M168 309l69-41M168 203l69 41" fill="none" stroke="#9fb0c3" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="256" cy="142" r="28" fill="#f7c948"/>
+  <circle cx="348" cy="195" r="28" fill="#14b8a6"/>
+  <circle cx="348" cy="317" r="28" fill="#3268e8"/>
+  <circle cx="256" cy="370" r="28" fill="#f97366"/>
+  <circle cx="164" cy="317" r="28" fill="#805ad5"/>
+  <circle cx="164" cy="195" r="28" fill="#36cfc9"/>
+</svg>
