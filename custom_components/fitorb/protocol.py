@@ -5,9 +5,9 @@ from .models import NotificationKind, ParsedNotification
 COMMAND_BATTERY = "03"
 COMMAND_SET_METRIC_UNITS = "0a0200"
 COMMAND_ACTIVITY = "43000f005f01"
-COMMAND_HEART_RATE = "6901"
-COMMAND_SPO2 = "6903"
-COMMAND_STRESS = "6908"
+COMMAND_HEART_RATE = "690101"
+COMMAND_SPO2 = "690301"
+COMMAND_STRESS = "690801"
 COMMAND_KEEPALIVE = "39"
 
 
@@ -104,10 +104,12 @@ def _parse_health_result(
     if not _ensure_16(data) or data[0] != 0x69:
         return None
 
-    running = data[3] == 0
+    status = data[2]
+    value = data[3]
+    running = status == 0x01 and value == 0
     values: dict[str, int | bool | None] = {"running": running}
-    if not running and data[2] == 0x01:
-        values[value_key] = data[3]
+    if value != 0:
+        values[value_key] = value
     else:
         values[value_key] = None
     return ParsedNotification(kind=kind, values=values, raw_hex=data.hex())

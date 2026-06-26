@@ -200,7 +200,7 @@ def _health_notification(kind: int, *, running: bool, value: int = 0) -> bytes:
     payload = bytearray(16)
     payload[0] = 0x69
     payload[1] = kind
-    payload[2] = 0x01 if not running else 0x00
+    payload[2] = 0x01
     payload[3] = 0x00 if running else value
     return bytes(payload)
 
@@ -525,6 +525,37 @@ async def test_ble_client_health_optional_timeout_uses_short_timeout() -> None:
     )
 
     assert updated is snapshot
+
+
+async def test_ble_client_health_running_state_extends_timeout() -> None:
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(
+        hass,
+        "AA:BB:CC:DD:EE:FF",
+        response_timeout=5,
+        health_response_timeout=0.05,
+        health_measurement_timeout=0.5,
+    )
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+    snapshot = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
+
+    async def _enqueue_measurement() -> None:
+        await queue.put(_health_notification(0x01, running=True))
+        await asyncio.sleep(0.12)
+        await queue.put(_health_notification(0x01, running=False, value=72))
+
+    task = asyncio.create_task(_enqueue_measurement())
+    updated = await asyncio.wait_for(
+        client._drain_optional_response(
+            queue,
+            snapshot,
+            expected_kind=NotificationKind.HEART_RATE,
+        ),
+        timeout=1,
+    )
+    await task
+
+    assert updated.heart_rate == 72
 
 
 async def test_ble_client_health_waits_for_final_result() -> None:

@@ -3,6 +3,9 @@ from __future__ import annotations
 from custom_components.fitorb.models import NotificationKind
 from custom_components.fitorb.protocol import (
     COMMAND_ACTIVITY,
+    COMMAND_HEART_RATE,
+    COMMAND_SPO2,
+    COMMAND_STRESS,
     ActivityLogParser,
     build_command,
     parse_notification,
@@ -22,6 +25,18 @@ def test_activity_command_requests_today_steps_log() -> None:
 
     assert command == bytes(
         [0x43, 0x00, 0x0F, 0x00, 0x5F, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xB2]
+    )
+
+
+def test_health_commands_start_realtime_measurements() -> None:
+    assert build_command(COMMAND_HEART_RATE) == bytes(
+        [0x69, 0x01, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x6B]
+    )
+    assert build_command(COMMAND_SPO2) == bytes(
+        [0x69, 0x03, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x6D]
+    )
+    assert build_command(COMMAND_STRESS) == bytes(
+        [0x69, 0x08, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x72]
     )
 
 
@@ -119,6 +134,36 @@ def test_parse_heart_rate_result() -> None:
     assert parsed is not None
     assert parsed.kind is NotificationKind.HEART_RATE
     assert parsed.values == {"heart_rate": 64, "running": False}
+
+
+def test_parse_realtime_heart_rate_result() -> None:
+    parsed = parse_notification(
+        bytes([0x69, 0x01, 0x00, 72, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xB2])
+    )
+
+    assert parsed is not None
+    assert parsed.kind is NotificationKind.HEART_RATE
+    assert parsed.values == {"heart_rate": 72, "running": False}
+
+
+def test_parse_health_measurement_running_state() -> None:
+    parsed = parse_notification(
+        bytes([0x69, 0x01, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x6B])
+    )
+
+    assert parsed is not None
+    assert parsed.kind is NotificationKind.HEART_RATE
+    assert parsed.values == {"heart_rate": None, "running": True}
+
+
+def test_parse_health_measurement_no_value_state() -> None:
+    parsed = parse_notification(
+        bytes([0x69, 0x01, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x6A])
+    )
+
+    assert parsed is not None
+    assert parsed.kind is NotificationKind.HEART_RATE
+    assert parsed.values == {"heart_rate": None, "running": False}
 
 
 def test_parse_spo2_result() -> None:

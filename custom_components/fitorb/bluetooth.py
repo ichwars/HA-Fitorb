@@ -13,6 +13,7 @@ from .const import (
     CMD_NOTIFY_CHAR_UUID,
     CMD_WRITE_CHAR_UUID,
     DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_HEALTH_MEASUREMENT_TIMEOUT,
     DEFAULT_HEALTH_RESPONSE_TIMEOUT,
     DEFAULT_RESPONSE_TIMEOUT,
 )
@@ -60,12 +61,14 @@ class FitorbBleClient:
         connect_timeout: float = DEFAULT_CONNECT_TIMEOUT,
         response_timeout: float = DEFAULT_RESPONSE_TIMEOUT,
         health_response_timeout: float = DEFAULT_HEALTH_RESPONSE_TIMEOUT,
+        health_measurement_timeout: float = DEFAULT_HEALTH_MEASUREMENT_TIMEOUT,
     ) -> None:
         self.hass = hass
         self.address = address
         self.connect_timeout = connect_timeout
         self.response_timeout = response_timeout
         self.health_response_timeout = health_response_timeout
+        self.health_measurement_timeout = health_measurement_timeout
 
     async def async_read_current_data(
         self,
@@ -182,6 +185,11 @@ class FitorbBleClient:
                 if expected_kind in _HEALTH_NOTIFICATION_KINDS
                 else self.response_timeout
             ),
+            measurement_timeout=(
+                self.health_measurement_timeout
+                if expected_kind in _HEALTH_NOTIFICATION_KINDS
+                else None
+            ),
         )
 
     async def _drain_optional_response(
@@ -191,6 +199,7 @@ class FitorbBleClient:
         *,
         expected_kind: NotificationKind,
         response_timeout: float | None = None,
+        measurement_timeout: float | None = None,
     ) -> FitorbData:
         """Drain an optional command response without failing the whole snapshot."""
         if (
@@ -198,12 +207,18 @@ class FitorbBleClient:
             and expected_kind in _HEALTH_NOTIFICATION_KINDS
         ):
             response_timeout = self.health_response_timeout
+        if (
+            measurement_timeout is None
+            and expected_kind in _HEALTH_NOTIFICATION_KINDS
+        ):
+            measurement_timeout = self.health_measurement_timeout
         try:
             return await self._drain_until_expected(
                 queue,
                 snapshot,
                 expected_kind=expected_kind,
                 response_timeout=response_timeout,
+                measurement_timeout=measurement_timeout,
                 log_timeout=False,
             )
         except FitorbResponseTimeout:
@@ -220,6 +235,7 @@ class FitorbBleClient:
         *,
         expected_kind: NotificationKind | str,
         response_timeout: float | None = None,
+        measurement_timeout: float | None = None,
         log_timeout: bool = True,
     ) -> FitorbData:
         """Drain notifications until the expected response is received."""
@@ -230,7 +246,14 @@ class FitorbBleClient:
         timeout_seconds = self.response_timeout
         if response_timeout is not None:
             timeout_seconds = response_timeout
-        end_time = self.hass.loop.time() + timeout_seconds
+        start_time = self.hass.loop.time()
+        end_time = start_time + timeout_seconds
+        measurement_deadline = (
+            start_time + measurement_timeout
+            if measurement_timeout is not None
+            else None
+        )
+        measurement_deadline_enabled = False
         while self.hass.loop.time() < end_time:
             timeout = max(0.1, end_time - self.hass.loop.time())
             try:
@@ -261,6 +284,14 @@ class FitorbBleClient:
             snapshot = _apply_notification(snapshot, parsed.kind, parsed.values)
             if _is_expected_response(parsed.kind, parsed.values, expected):
                 return snapshot
+            if (
+                parsed.kind is expected
+                and parsed.values.get("running") is True
+                and measurement_deadline is not None
+                and not measurement_deadline_enabled
+            ):
+                end_time = max(end_time, measurement_deadline)
+                measurement_deadline_enabled = True
         if log_timeout:
             _LOGGER.debug(
                 "No Fitorb %s response before command timeout",

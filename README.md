@@ -51,7 +51,8 @@ Debug logs may include raw BLE notification payloads in hexadecimal form.
 
 Heart rate, SpO2, and stress reads are best-effort. Some Fitorb/Colmi-compatible
 firmware versions do not answer the known live health commands, so the integration
-uses a short optional timeout for those reads and keeps battery/activity values.
+uses a short optional timeout until a measurement starts, then waits longer for
+the final value while keeping battery/activity values.
 
 ## Troubleshooting
 
