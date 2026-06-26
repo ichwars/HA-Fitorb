@@ -75,6 +75,10 @@ class FitorbResponseTimeout(FitorbBluetoothError):
     """Raised when the ring does not send the expected command response."""
 
 
+class FitorbBleSessionUnavailable(FitorbBluetoothError):
+    """Raised internally when the current GATT session is no longer usable."""
+
+
 class FitorbBleClient:
     """Read current data from a Fitorb/Colmi-compatible ring."""
 
@@ -148,37 +152,44 @@ class FitorbBleClient:
                 snapshot,
                 expected_kind=NotificationKind.BATTERY,
             )
-            await self._write_optional_command(
-                client,
-                COMMAND_SET_METRIC_UNITS,
-                description="metric units",
-            )
-            snapshot = await self._read_optional_command(
-                client,
-                queue,
-                snapshot,
-                command=COMMAND_ACTIVITY,
-                expected_kind=NotificationKind.ACTIVITY,
-            )
-            if include_health:
-                for command, expected_kind in (
-                    (COMMAND_HEART_RATE, NotificationKind.HEART_RATE),
-                    (COMMAND_SPO2, NotificationKind.SPO2),
-                    (COMMAND_STRESS, NotificationKind.STRESS),
-                ):
-                    snapshot = await self._read_optional_command(
-                        client,
-                        queue,
-                        snapshot,
-                        command=command,
-                        expected_kind=expected_kind,
-                    )
             history_result = None
-            if history_request is not None:
-                history_result = await self._read_history(
-                    queue,
+            try:
+                await self._write_optional_command(
                     client,
-                    history_request,
+                    COMMAND_SET_METRIC_UNITS,
+                    description="metric units",
+                )
+                snapshot = await self._read_optional_command(
+                    client,
+                    queue,
+                    snapshot,
+                    command=COMMAND_ACTIVITY,
+                    expected_kind=NotificationKind.ACTIVITY,
+                )
+                if include_health:
+                    for command, expected_kind in (
+                        (COMMAND_HEART_RATE, NotificationKind.HEART_RATE),
+                        (COMMAND_SPO2, NotificationKind.SPO2),
+                        (COMMAND_STRESS, NotificationKind.STRESS),
+                    ):
+                        snapshot = await self._read_optional_command(
+                            client,
+                            queue,
+                            snapshot,
+                            command=command,
+                            expected_kind=expected_kind,
+                        )
+                if history_request is not None:
+                    history_result = await self._read_history(
+                        queue,
+                        client,
+                        history_request,
+                    )
+            except FitorbBleSessionUnavailable as err:
+                _LOGGER.debug(
+                    "Skipping remaining Fitorb optional reads because the BLE "
+                    "session is no longer usable: %s",
+                    err,
                 )
             return FitorbReadResult(data=snapshot, history=history_result)
         finally:
@@ -203,6 +214,8 @@ class FitorbBleClient:
             await client.write_gatt_char(CMD_WRITE_CHAR_UUID, build_command(command))
         except Exception as err:
             _LOGGER.debug("Unable to request optional Fitorb %s: %s", description, err)
+            if _is_ble_session_unavailable_error(err):
+                raise FitorbBleSessionUnavailable(str(err)) from err
 
     async def _read_optional_command(
         self,
@@ -228,6 +241,8 @@ class FitorbBleClient:
                 expected_kind.value,
                 err,
             )
+            if _is_ble_session_unavailable_error(err):
+                raise FitorbBleSessionUnavailable(str(err)) from err
             return snapshot
         return await self._drain_optional_response(
             queue,
@@ -292,6 +307,7 @@ class FitorbBleClient:
         unknown_packets = 0
         malformed_packets = 0
         sleep_summary: FitorbSleepSummary | None = None
+        session_error: Exception | None = None
         status = "success"
         for target_day in request.days:
             try:
@@ -319,6 +335,15 @@ class FitorbBleClient:
                     )
                     status = "partial"
             except Exception as err:
+                if _is_ble_session_unavailable_error(err):
+                    _LOGGER.debug(
+                        "Stopping Fitorb history because the BLE session is no "
+                        "longer usable: %s",
+                        err,
+                    )
+                    session_error = err
+                    status = "partial"
+                    break
                 _LOGGER.debug(
                     "Unable to read Fitorb heart_rate history for %s: %s",
                     target_day.isoformat(),
@@ -326,18 +351,35 @@ class FitorbBleClient:
                 )
                 status = "partial"
                 continue
-        try:
-            sleep_samples, sleep_summary, sleep_unknown, sleep_malformed = (
-                await self._read_sleep_history(client)
-            )
-            samples.extend(sleep_samples)
-            unknown_packets += sleep_unknown
-            malformed_packets += sleep_malformed
-        except Exception as err:
-            _LOGGER.debug("Unable to read Fitorb sleep history: %s", err)
-            status = "partial"
+        if session_error is None:
+            try:
+                sleep_samples, sleep_summary, sleep_unknown, sleep_malformed = (
+                    await self._read_sleep_history(client)
+                )
+                samples.extend(sleep_samples)
+                unknown_packets += sleep_unknown
+                malformed_packets += sleep_malformed
+            except Exception as err:
+                if _is_ble_session_unavailable_error(err):
+                    _LOGGER.debug(
+                        "Stopping Fitorb sleep history because the BLE session "
+                        "is no longer usable: %s",
+                        err,
+                    )
+                    session_error = err
+                else:
+                    _LOGGER.debug("Unable to read Fitorb sleep history: %s", err)
+                status = "partial"
 
         ordered = tuple(sorted(samples, key=lambda sample: sample.timestamp))
+        if (
+            session_error is not None
+            and not ordered
+            and sleep_summary is None
+            and unknown_packets == 0
+            and malformed_packets == 0
+        ):
+            raise FitorbBleSessionUnavailable(str(session_error)) from session_error
         return FitorbHistoryResult(
             samples=ordered,
             status=status,
@@ -605,3 +647,18 @@ def _is_health_response_without_value(
     """Return whether a health command completed without a measured value."""
     value_key = _HEALTH_VALUE_KEYS.get(kind)
     return value_key is not None and values.get(value_key) is None
+
+
+def _is_ble_session_unavailable_error(err: Exception) -> bool:
+    """Return whether an exception means the current BLE session is unusable."""
+    message = str(err).lower()
+    return any(
+        marker in message
+        for marker in (
+            "service discovery has not been performed",
+            "not connected",
+            "device is not connected",
+            "disconnected",
+            "org.bluez.error.notconnected",
+        )
+    )

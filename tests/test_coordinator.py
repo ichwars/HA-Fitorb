@@ -732,6 +732,78 @@ async def test_ble_client_keeps_activity_when_optional_health_write_fails(
     assert all(record.exc_info is None for record in caplog.records)
 
 
+async def test_ble_client_skips_history_when_ble_session_is_lost() -> None:
+    class FakeBleakClient:
+        def __init__(self) -> None:
+            self.handler = None
+            self.commands: list[bytes] = []
+
+        async def start_notify(self, _uuid, handler) -> None:
+            self.handler = handler
+
+        async def write_gatt_char(self, _uuid, payload: bytes) -> None:
+            self.commands.append(payload)
+            if payload[0] == 0x03:
+                assert self.handler is not None
+                self.handler(1, bytearray(_battery_notification(level=82)))
+            elif payload[0] == 0x43:
+                assert self.handler is not None
+                self.handler(
+                    1,
+                    bytearray(
+                        _activity_notification(
+                            steps=981,
+                            calories=55,
+                            distance=594,
+                        )
+                    ),
+                )
+            elif payload[0] == 0x69:
+                raise RuntimeError("Service Discovery has not been performed yet")
+
+        async def stop_notify(self, _uuid) -> None:
+            raise RuntimeError("Service Discovery has not been performed yet")
+
+        async def disconnect(self) -> None:
+            return None
+
+    fake_client = FakeBleakClient()
+    hass = SimpleNamespace(loop=asyncio.get_running_loop())
+    client = FitorbBleClient(
+        hass,
+        "AA:BB:CC:DD:EE:FF",
+        response_timeout=0.05,
+    )
+
+    with (
+        patch(
+            (
+                "custom_components.fitorb.bluetooth.bluetooth"
+                ".async_ble_device_from_address"
+            ),
+            return_value=object(),
+        ),
+        patch(
+            "custom_components.fitorb.bluetooth.establish_connection",
+            AsyncMock(return_value=fake_client),
+        ),
+    ):
+        result = await client.async_read_current_data_with_history(
+            FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring"),
+            include_health=True,
+            history_request=FitorbHistoryRequest(
+                days=(date(2026, 6, 26), date(2026, 6, 25)),
+                day_offsets=(0, 1),
+            ),
+        )
+
+    assert result.data.available is True
+    assert result.data.battery_level == 82
+    assert result.data.steps == 981
+    assert result.history is None
+    assert not any(command[0] == 0x15 for command in fake_client.commands)
+
+
 async def test_ble_client_optional_timeout_logs_without_traceback(caplog) -> None:
     client = _test_client()
     queue: asyncio.Queue[bytes] = asyncio.Queue()
