@@ -109,4 +109,7 @@ class FitorbConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 options=_default_options(),
             )
 
-        return self.async_show_form(step_id="bluetooth_confirm")
+        return self.async_show_form(
+            step_id="bluetooth_confirm",
+            description_placeholders={"name": name},
+        )

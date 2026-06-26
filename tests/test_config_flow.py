@@ -69,6 +69,7 @@ async def test_bluetooth_flow_creates_confirm_form(hass) -> None:
 
     assert result["type"] is config_entries.FlowResultType.FORM
     assert result["step_id"] == "bluetooth_confirm"
+    assert result["description_placeholders"] == {"name": "R06_ABCD"}
 
 
 async def test_bluetooth_confirm_creates_entry(hass: HomeAssistant) -> None:
