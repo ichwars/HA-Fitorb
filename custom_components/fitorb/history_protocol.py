@@ -177,7 +177,10 @@ class SplitSeriesHistoryParser:
             self.raw = []
             return None
 
-        values = packet[3:15] if index == 1 else packet[2:15]
+        if index == 1:
+            values = packet[3:14] if len(packet) == 15 else packet[3:15]
+        else:
+            values = packet[2:14] if len(packet) == 15 else packet[2:15]
         self.raw.extend(int(value) for value in values)
         return tuple(
             FitorbHistorySample(

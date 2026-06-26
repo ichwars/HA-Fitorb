@@ -92,9 +92,22 @@ def test_split_series_parser_decodes_stress_values() -> None:
     )
 
     assert samples is not None
-    assert [sample.value for sample in samples[:3]] == [61, 58, 55]
+    assert [(sample.timestamp.hour, sample.value) for sample in samples] == [
+        (0, 61),
+        (1, 58),
+        (1, 55),
+        (2, 60),
+        (3, 68),
+        (3, 56),
+        (4, 67),
+        (4, 62),
+        (5, 69),
+    ]
+    assert len(samples) == 9
+    assert all(sample.value != 224 for sample in samples)
     assert samples[0].timestamp == datetime(2026, 6, 26, tzinfo=UTC)
     assert samples[1].timestamp == datetime(2026, 6, 26, 1, 0, tzinfo=UTC)
+    assert samples[-1].timestamp == datetime(2026, 6, 26, 5, 0, tzinfo=UTC)
 
 
 def test_big_data_frame_parser_reassembles_chunked_sleep_response() -> None:
