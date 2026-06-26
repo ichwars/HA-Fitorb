@@ -23,6 +23,7 @@
 - Raw PPG and accelerometer data are disabled by default and only logged or exposed diagnostically when explicitly enabled.
 - Unknown notifications are debug logs only and must not fail an update.
 - The integration must not crash Home Assistant when the ring is out of range, asleep, charging, or connected to the phone app.
+- Bluetooth manifest discovery uses concrete `local_name` matchers `R02_*`, `R03_*`, `R04_*`, `R05_*`, and `R06_*`; manual address entry remains the fallback.
 
 ---
 
@@ -160,10 +161,11 @@ Create `custom_components/fitorb/manifest.json`:
   "name": "Fitorb Smart Ring",
   "after_dependencies": ["bluetooth"],
   "bluetooth": [
-    {
-      "local_name": "R0?_????",
-      "connectable": true
-    }
+    { "local_name": "R02_*", "connectable": true },
+    { "local_name": "R03_*", "connectable": true },
+    { "local_name": "R04_*", "connectable": true },
+    { "local_name": "R05_*", "connectable": true },
+    { "local_name": "R06_*", "connectable": true }
   ],
   "codeowners": [],
   "config_flow": true,
