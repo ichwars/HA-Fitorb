@@ -110,17 +110,11 @@ class FitorbBleClient:
                 CMD_WRITE_CHAR_UUID,
                 build_command(COMMAND_ACTIVITY),
             )
-            try:
-                snapshot = await self._drain_until_expected(
-                    queue,
-                    snapshot,
-                    expected_kind=NotificationKind.ACTIVITY,
-                )
-            except FitorbResponseTimeout:
-                _LOGGER.debug(
-                    "No Fitorb activity response; keeping other current values",
-                    exc_info=True,
-                )
+            snapshot = await self._drain_optional_response(
+                queue,
+                snapshot,
+                expected_kind=NotificationKind.ACTIVITY,
+            )
             if include_health:
                 for command, expected_kind in (
                     (COMMAND_HEART_RATE, NotificationKind.HEART_RATE),
@@ -131,7 +125,7 @@ class FitorbBleClient:
                         CMD_WRITE_CHAR_UUID,
                         build_command(command),
                     )
-                    snapshot = await self._drain_until_expected(
+                    snapshot = await self._drain_optional_response(
                         queue,
                         snapshot,
                         expected_kind=expected_kind,
@@ -146,6 +140,28 @@ class FitorbBleClient:
                 await client.disconnect()
             except Exception:
                 _LOGGER.debug("Unable to disconnect Fitorb client", exc_info=True)
+
+    async def _drain_optional_response(
+        self,
+        queue: asyncio.Queue[bytes],
+        snapshot: FitorbData,
+        *,
+        expected_kind: NotificationKind,
+    ) -> FitorbData:
+        """Drain an optional command response without failing the whole snapshot."""
+        try:
+            return await self._drain_until_expected(
+                queue,
+                snapshot,
+                expected_kind=expected_kind,
+            )
+        except FitorbResponseTimeout:
+            _LOGGER.debug(
+                "No Fitorb %s response; keeping other current values",
+                expected_kind.value,
+                exc_info=True,
+            )
+            return snapshot
 
     async def _drain_until_expected(
         self,
