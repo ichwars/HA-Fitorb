@@ -5,7 +5,6 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
 
 from .bluetooth import FitorbBleClient
 from .const import DOMAIN, PLATFORMS
@@ -21,21 +20,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client = FitorbBleClient(hass, entry.data[CONF_ADDRESS])
     coordinator = FitorbDataUpdateCoordinator(hass, entry, client)
     await coordinator.history_store.async_load()
-    try:
-        await coordinator.async_config_entry_first_refresh()
-    except ConfigEntryNotReady as err:
-        _LOGGER.info(
-            "Fitorb ring is unavailable during setup and will be polled again: %s",
-            err,
+    fallback = coordinator._apply_history_store_summary(
+        coordinator.data or coordinator.base_data
+    )
+    coordinator.async_set_updated_data(
+        fallback.with_values(
+            available=False,
+            last_error="Waiting for first Bluetooth update",
         )
-        fallback = coordinator._apply_history_store_summary(
-            coordinator.data or coordinator.base_data
-        )
-        coordinator.async_set_updated_data(
-            fallback.with_values(available=False, last_error=str(err))
-        )
+    )
     hass.data[DOMAIN][entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    refresh_task = hass.async_create_task(_async_refresh_after_setup(coordinator))
+    entry.async_on_unload(refresh_task.cancel)
     return True
 
 
@@ -50,3 +47,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload Fitorb when config entry options change."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def _async_refresh_after_setup(
+    coordinator: FitorbDataUpdateCoordinator,
+) -> None:
+    """Refresh Fitorb data without blocking config entry setup."""
+    try:
+        await coordinator.async_request_refresh()
+    except Exception as err:
+        _LOGGER.debug("Initial Fitorb refresh after setup failed: %s", err)

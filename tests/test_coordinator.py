@@ -9,7 +9,6 @@ import pytest
 
 from homeassistant.const import CONF_ADDRESS, CONF_NAME, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -1503,7 +1502,7 @@ async def test_ble_client_history_parse_failure_keeps_live_result() -> None:
     assert result.history.samples == ()
 
 
-async def test_setup_entry_keeps_entry_loaded_on_first_refresh_failure(
+async def test_setup_entry_schedules_initial_refresh_without_blocking(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     entry.add_to_hass(hass)
@@ -1514,18 +1513,28 @@ async def test_setup_entry_keeps_entry_loaded_on_first_refresh_failure(
             last_history_status="success",
         )
     )
+    created_coroutines = []
+    fake_refresh_task = SimpleNamespace(cancel=Mock())
+
+    def _create_task(coro, *args, **kwargs):
+        created_coroutines.append(coro)
+        coro.close()
+        return fake_refresh_task
+
     fake_coordinator = SimpleNamespace(
         base_data=base_data,
         data=None,
         history_store=SimpleNamespace(async_load=AsyncMock()),
         _apply_history_store_summary=apply_history_summary,
-        async_set_updated_data=AsyncMock(),
+        async_set_updated_data=Mock(),
         async_config_entry_first_refresh=AsyncMock(
-            side_effect=ConfigEntryNotReady("ring offline")
+            side_effect=AssertionError("setup awaited the initial Bluetooth refresh")
         ),
+        async_request_refresh=AsyncMock(),
     )
 
     with (
+        patch.object(hass, "async_create_task", Mock(side_effect=_create_task)),
         patch.object(fitorb_init, "FitorbBleClient", return_value=object()),
         patch.object(
             fitorb_init,
@@ -1543,14 +1552,24 @@ async def test_setup_entry_keeps_entry_loaded_on_first_refresh_failure(
     assert result is True
     assert DOMAIN in hass.data
     assert hass.data[DOMAIN][entry.entry_id] is fake_coordinator
+    fake_coordinator.async_config_entry_first_refresh.assert_not_awaited()
     fake_coordinator.async_set_updated_data.assert_called_once()
     fallback = fake_coordinator.async_set_updated_data.call_args.args[0]
     assert fallback.available is False
-    assert fallback.last_error == "ring offline"
+    assert fallback.last_error == "Waiting for first Bluetooth update"
     assert fallback.last_history_sample_count == 42
     assert fallback.last_history_status == "success"
     apply_history_summary.assert_called_once_with(base_data)
     forward_setups.assert_awaited_once_with(entry, fitorb_init.PLATFORMS)
+    assert len(created_coroutines) == 1
+
+
+async def test_initial_refresh_task_requests_refresh() -> None:
+    fake_coordinator = SimpleNamespace(async_request_refresh=AsyncMock())
+
+    await fitorb_init._async_refresh_after_setup(fake_coordinator)
+
+    fake_coordinator.async_request_refresh.assert_awaited_once()
 
 
 async def test_setup_entry_reloads_on_options_update(
@@ -1560,12 +1579,20 @@ async def test_setup_entry_reloads_on_options_update(
     base_data = FitorbData(address="AA:BB:CC:DD:EE:FF", name="Ring")
     fake_coordinator = SimpleNamespace(
         base_data=base_data,
+        data=None,
         history_store=SimpleNamespace(async_load=AsyncMock()),
-        async_set_updated_data=AsyncMock(),
+        _apply_history_store_summary=Mock(side_effect=lambda data: data),
+        async_set_updated_data=Mock(),
         async_config_entry_first_refresh=AsyncMock(),
+        async_request_refresh=AsyncMock(),
     )
+    fake_refresh_task = SimpleNamespace(cancel=Mock())
     listeners = []
     unload_callbacks = []
+
+    def _create_task(coro, *args, **kwargs):
+        coro.close()
+        return fake_refresh_task
 
     def _add_update_listener(listener):
         listeners.append(listener)
@@ -1577,6 +1604,7 @@ async def test_setup_entry_reloads_on_options_update(
     with (
         patch.object(entry, "add_update_listener", _add_update_listener),
         patch.object(entry, "async_on_unload", _async_on_unload),
+        patch.object(hass, "async_create_task", Mock(side_effect=_create_task)),
         patch.object(fitorb_init, "FitorbBleClient", return_value=object()),
         patch.object(
             fitorb_init,
@@ -1599,5 +1627,5 @@ async def test_setup_entry_reloads_on_options_update(
 
     assert result is True
     assert len(listeners) == 1
-    assert len(unload_callbacks) == 1
+    assert len(unload_callbacks) == 2
     async_reload.assert_awaited_once_with(entry.entry_id)
